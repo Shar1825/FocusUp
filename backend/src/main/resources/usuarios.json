@@ -1,0 +1,23 @@
+[
+  {
+    "id": 1,
+    "nombre": "Administrador FocusUp",
+    "correo": "admin@focusup.com",
+    "password": "admin123",
+    "rol": "ADMINISTRADOR"
+  },
+  {
+    "id": 2,
+    "nombre": "Docente FocusUp",
+    "correo": "docente@focusup.com",
+    "password": "docente123",
+    "rol": "DOCENTE"
+  },
+  {
+    "id": 3,
+    "nombre": "Estudiante FocusUp",
+    "correo": "estudiante@focusup.com",
+    "password": "estudiante123",
+    "rol": "ESTUDIANTE"
+  }
+]
