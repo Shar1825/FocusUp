@@ -17,6 +17,8 @@ fun Application.configureRouting() {
             call.respondText("Servidor FocusUp Ktor funcionando correctamente!")
         }
 
+        estudioRoutes()
+
         post("/api/login") {
             try {
                 val request = call.receive<LoginRequest>()
