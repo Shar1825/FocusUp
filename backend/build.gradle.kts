@@ -15,6 +15,12 @@ application {
 kotlin {
     jvmToolchain(21)
 }
+ktor {
+    fatJar {
+        archiveFileName.set("focusup.jar")
+    }
+}
+
 dependencies {
     implementation(ktorLibs.serialization.kotlinx.json)
     implementation(ktorLibs.server.config.yaml)
@@ -22,8 +28,11 @@ dependencies {
     implementation(ktorLibs.server.core)
     implementation(ktorLibs.server.netty)
     implementation(libs.logback.classic)
+    implementation("com.zaxxer:HikariCP:5.1.0")
+    implementation("com.mysql:mysql-connector-j:8.4.0")
 
     testImplementation(kotlin("test"))
+    testImplementation(ktorLibs.server.testHost)
     testImplementation(ktorLibs.client.contentNegotiation)
 }
 tasks.test {
