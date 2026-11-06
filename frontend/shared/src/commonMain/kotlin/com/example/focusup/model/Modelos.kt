@@ -211,7 +211,9 @@ data class EvidenciaResumen(
     val sesionId: Int,
     val estudiante: String = "",
     val objetivo: String = "",
-    val estado: String = "PENDIENTE"
+    val estado: String = "PENDIENTE",
+    @kotlinx.serialization.Transient
+    val imagenBytes: ByteArray? = null
 )
 
 @Serializable

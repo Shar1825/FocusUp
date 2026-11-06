@@ -2,7 +2,9 @@ package com.example.focusup.ui.estudio
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -15,25 +17,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.focusup.model.EvidenciaResumen
 import com.example.focusup.model.LoginResponse
 import com.example.focusup.model.Rol
 import com.example.focusup.ui.theme.BordeTarjeta
 import com.example.focusup.ui.theme.BordeTarjetaNeon
 import com.example.focusup.ui.theme.FocusUpColors
 
-/**
- * Byte array de una imagen JPEG mínima válida de prueba (1x1 px)
- * para realizar la subida real multipart/form-data a POST /api/evidencias
- * en ausencia de hardware de cámara o durante pruebas de integración.
- */
 private val JpegMuestraBytes = byteArrayOf(
     0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(), 0x00.toByte(), 0x10.toByte(),
     0x4A.toByte(), 0x46.toByte(), 0x49.toByte(), 0x46.toByte(), 0x00.toByte(), 0x01.toByte(),
@@ -62,13 +62,6 @@ private val JpegMuestraBytes = byteArrayOf(
     0x00.toByte(), 0x7F.toByte(), 0x00.toByte(), 0xFF.toByte(), 0xD9.toByte()
 )
 
-/**
- * Pantalla de Estudio de FocusUp (Puntos 3, 4 y 5):
- * - Temporizador Pomodoro con StateFlow y validaciones de objetivo/duración.
- * - Ciclo completo de integración con cámara y subida de evidencia.
- * - Polling periódico cada 3s al backend para aprobación/rechazo del docente.
- * - Liberación del dispositivo al aprobarse y solicitud de nueva foto al rechazarse.
- */
 @Composable
 fun StudyScreen(
     usuario: LoginResponse,
@@ -80,21 +73,31 @@ fun StudyScreen(
     var modalRechazoVisible by remember { mutableStateOf(false) }
     var idEvidenciaAValidar by remember { mutableStateOf<Int?>(null) }
     var comentarioDocenteInput by remember { mutableStateOf("") }
+    var fotoAmpliada by remember { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(usuario.rol) {
-        if (usuario.rol == Rol.DOCENTE || usuario.rol == Rol.ADMINISTRADOR) {
-            viewModel.cargarEvidenciasPendientesDocente()
+    val abrirCamaraNativa = rememberCameraLauncher { bytes ->
+        viewModel.subirEvidencia(bytes)
+    }
+
+    val dispararCamara: () -> Unit = {
+        if (onAbrirCamara != null && state.sesionIdActual != null) {
+            onAbrirCamara(state.sesionIdActual!!)
+        } else {
+            abrirCamaraNativa()
         }
     }
 
-    // Si la sesión entra en ESPERANDO_FOTO o RECHAZADA y existe el callback de cámara del compañero 3
+    LaunchedEffect(usuario.id, usuario.rol) {
+        if (usuario.rol == Rol.DOCENTE || usuario.rol == Rol.ADMINISTRADOR) {
+            viewModel.cargarEvidenciasPendientesDocente()
+        } else {
+            viewModel.restaurarSesionEstudiante(usuario.id)
+        }
+    }
+
     LaunchedEffect(state.estadoSesion) {
         if (state.estadoSesion == EstadoSesionEstudio.ESPERANDO_FOTO) {
-            if (onAbrirCamara != null && state.sesionIdActual != null) {
-                onAbrirCamara(state.sesionIdActual!!)
-            } else {
-                mostrarModalSubirEvidencia = true
-            }
+            dispararCamara()
         }
     }
 
@@ -105,7 +108,6 @@ fun StudyScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(20.dp)
         ) {
-            // Título de la pantalla
             Text(
                 text = "Centro de Enfoque Pomodoro",
                 style = MaterialTheme.typography.titleLarge,
@@ -122,9 +124,6 @@ fun StudyScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // =================================================================
-            // TARJETA PRINCIPAL DEL TEMPORIZADOR Y ESTADO DE SESIÓN
-            // =================================================================
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(26.dp),
@@ -143,12 +142,10 @@ fun StudyScreen(
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Badge del estado actual
                     EstadoBadge(estado = state.estadoSesion)
 
                     Spacer(modifier = Modifier.height(18.dp))
 
-                    // Anillo de Progreso Animado
                     val totalSegundos = (state.duracionMinutos * 60).coerceAtLeast(1)
                     val progreso = (state.segundosRestantes.toFloat() / totalSegundos.toFloat()).coerceIn(0f, 1f)
 
@@ -157,12 +154,10 @@ fun StudyScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Canvas(modifier = Modifier.fillMaxSize()) {
-                            // Fondo del anillo
                             drawCircle(
                                 color = FocusUpColors.Tarjeta,
                                 style = Stroke(width = 14.dp.toPx())
                             )
-                            // Arco neón con progreso real
                             drawArc(
                                 color = when (state.estadoSesion) {
                                     EstadoSesionEstudio.APROBADA -> FocusUpColors.VerdeExito
@@ -213,12 +208,8 @@ fun StudyScreen(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // =========================================================
-                    // CONTENIDO SEGÚN ESTADO DE LA SESIÓN
-                    // =========================================================
                     when (state.estadoSesion) {
                         EstadoSesionEstudio.CONFIGURACION -> {
-                            // 1. Entrada de Objetivo Personalizado
                             OutlinedTextField(
                                 value = state.objetivo,
                                 onValueChange = { viewModel.setObjetivo(it) },
@@ -235,7 +226,6 @@ fun StudyScreen(
 
                             Spacer(modifier = Modifier.height(10.dp))
 
-                            // Sugerencias rápidas de materias
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(listOf("Programación Kotlin", "Matemáticas", "Ing. de Software", "Bases de Datos")) { m ->
                                     val sel = state.objetivo == m
@@ -252,7 +242,6 @@ fun StudyScreen(
 
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            // 2. Selector de Duración (15, 25, 45, 60 minutos)
                             Text(
                                 text = "Selecciona la duración:",
                                 style = MaterialTheme.typography.labelMedium,
@@ -281,7 +270,6 @@ fun StudyScreen(
 
                             Spacer(modifier = Modifier.height(24.dp))
 
-                            // Botón Iniciar Sesión (POST /api/sesiones)
                             Button(
                                 onClick = { viewModel.iniciarSesionPomodoro(usuario.id) },
                                 enabled = !state.cargando,
@@ -300,7 +288,6 @@ fun StudyScreen(
                         }
 
                         EstadoSesionEstudio.EN_CURSO, EstadoSesionEstudio.PAUSADO -> {
-                            // Información de la sesión activa
                             Text(
                                 text = state.objetivo.ifBlank { "Estudio Concentrado" },
                                 style = MaterialTheme.typography.titleMedium,
@@ -317,7 +304,6 @@ fun StudyScreen(
 
                             Spacer(modifier = Modifier.height(20.dp))
 
-                            // Controles Pausar / Reanudar / Cancelar
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -354,7 +340,6 @@ fun StudyScreen(
 
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            // Ayuda rápida de pruebas para desarrollo
                             TextButton(onClick = { viewModel.simularFinDeTiempoParaPruebas() }) {
                                 Text("⚡ Simular término de tiempo (Pruebas 3s)", color = FocusUpColors.TextoSecundario, fontSize = 12.sp)
                             }
@@ -371,23 +356,27 @@ fun StudyScreen(
                                     Text("📷 Tiempo de concentración completado", fontWeight = FontWeight.Bold, color = FocusUpColors.Ambar)
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
-                                        "Para validar tus horas de estudio, toma o sube una fotografía de tus notas o área de trabajo.",
+                                        "Para validar tus horas de estudio, toma una fotografía de tus notas o área de trabajo.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = FocusUpColors.TextoSecundario,
                                         textAlign = TextAlign.Center
                                     )
                                     Spacer(modifier = Modifier.height(14.dp))
-                                    Button(
-                                        onClick = {
-                                            if (onAbrirCamara != null && state.sesionIdActual != null) {
-                                                onAbrirCamara(state.sesionIdActual!!)
-                                            } else {
-                                                mostrarModalSubirEvidencia = true
-                                            }
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.AzulElectrico)
-                                    ) {
-                                        Text("📸 Abrir Cámara / Enviar Evidencia", color = FocusUpColors.Fondo, fontWeight = FontWeight.Bold)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(
+                                            onClick = { dispararCamara() },
+                                            colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.AzulElectrico),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("📸 Abrir Cámara", color = FocusUpColors.Fondo, fontWeight = FontWeight.Bold)
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = { mostrarModalSubirEvidencia = true },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("📁 Muestra", color = FocusUpColors.TextoSecundario)
+                                        }
                                     }
                                 }
                             }
@@ -423,17 +412,28 @@ fun StudyScreen(
                                     )
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
-                                        text = "Sesión #${state.sesionIdActual} • Evidencia #${state.evidenciaIdActual}",
+                                        text = "Sesión #${state.sesionIdActual ?: 0} • Evidencia #${state.evidenciaIdActual ?: 0}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = FocusUpColors.TextoSecundario
                                     )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "(Consultando estado cada 3 segundos automáticamente)",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = FocusUpColors.TextoSecundario.copy(alpha = 0.7f),
-                                        fontSize = 10.sp
-                                    )
+
+                                    state.ultimaImagenBytes?.let { bytes ->
+                                        byteArrayToImageBitmap(bytes)?.let { img ->
+                                            Spacer(modifier = Modifier.height(12.dp))
+                                            Text("Fotografía enviada:", style = MaterialTheme.typography.labelSmall, color = FocusUpColors.TextoSecundario)
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Image(
+                                                bitmap = img,
+                                                contentDescription = "Evidencia Fotográfica",
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(160.dp)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .clickable { fotoAmpliada = img },
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -469,6 +469,23 @@ fun StudyScreen(
                                             )
                                         }
                                     }
+
+                                    state.ultimaImagenBytes?.let { bytes ->
+                                        byteArrayToImageBitmap(bytes)?.let { img ->
+                                            Spacer(modifier = Modifier.height(12.dp))
+                                            Image(
+                                                bitmap = img,
+                                                contentDescription = "Evidencia Fotográfica Aprobada",
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(160.dp)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .clickable { fotoAmpliada = img },
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        }
+                                    }
+
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Button(
                                         onClick = { viewModel.iniciarNuevaSesion() },
@@ -512,19 +529,29 @@ fun StudyScreen(
                                             )
                                         }
                                     }
+
+                                    state.ultimaImagenBytes?.let { bytes ->
+                                        byteArrayToImageBitmap(bytes)?.let { img ->
+                                            Spacer(modifier = Modifier.height(12.dp))
+                                            Image(
+                                                bitmap = img,
+                                                contentDescription = "Evidencia Fotográfica Rechazada",
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(160.dp)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .clickable { fotoAmpliada = img },
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        }
+                                    }
+
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Button(
-                                        onClick = {
-                                            viewModel.reintentarCapturaFoto()
-                                            if (onAbrirCamara != null && state.sesionIdActual != null) {
-                                                onAbrirCamara(state.sesionIdActual!!)
-                                            } else {
-                                                mostrarModalSubirEvidencia = true
-                                            }
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.Error)
+                                        onClick = { viewModel.reintentarCapturaFoto() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.AzulElectrico)
                                     ) {
-                                        Text("📸 Tomar Nueva Fotografía", color = Color.White, fontWeight = FontWeight.Bold)
+                                        Text("📸 Capturar Nueva Foto", color = FocusUpColors.Fondo, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -533,27 +560,37 @@ fun StudyScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // =================================================================
-            // SECCIÓN PARA DOCENTE: VALIDACIÓN DE EVIDENCIAS
-            // =================================================================
+            // PANEL DOCENTE / ADMIN PARA REVISAR EVIDENCIAS
             if (usuario.rol == Rol.DOCENTE || usuario.rol == Rol.ADMINISTRADOR) {
-                Text(
-                    text = "Panel Docente: Validación de Evidencias",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = FocusUpColors.Texto
-                )
-                Text(
-                    text = "Revisa y califica las fotografías de sesiones enviadas por estudiantes.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = FocusUpColors.TextoSecundario
-                )
+                Spacer(modifier = Modifier.height(30.dp))
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Panel Docente: Validación de Evidencias",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = FocusUpColors.Texto
+                        )
+                        Text(
+                            text = "Revisa y aprueba o rechaza las sesiones enviadas por tus estudiantes.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = FocusUpColors.TextoSecundario
+                        )
+                    }
+                }
 
-                if (state.evidenciasPendientes.isEmpty()) {
+                Spacer(modifier = Modifier.height(14.dp))
+
+                if (state.cargando) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = FocusUpColors.AzulElectrico)
+                    }
+                } else if (state.evidenciasPendientes.isEmpty()) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
@@ -561,247 +598,273 @@ fun StudyScreen(
                         border = BordeTarjeta
                     ) {
                         Text(
-                            text = "No hay evidencias pendientes de revisión.",
+                            text = "✨ No hay evidencias pendientes de validación por el momento.",
                             modifier = Modifier.padding(20.dp),
+                            style = MaterialTheme.typography.bodyMedium,
                             color = FocusUpColors.TextoSecundario,
-                            style = MaterialTheme.typography.bodyMedium
+                            textAlign = TextAlign.Center
                         )
                     }
                 } else {
-                    state.evidenciasPendientes.forEach { ev ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = FocusUpColors.Tarjeta),
-                            border = BordeTarjeta
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = ev.estudiante.ifBlank { "Estudiante (Sesión #${ev.sesionId})" },
-                                        fontWeight = FontWeight.Bold,
-                                        color = FocusUpColors.Texto
-                                    )
-                                    Text(
-                                        text = "Evidencia #${ev.id}",
-                                        color = FocusUpColors.AzulElectrico,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Objetivo: ${ev.objetivo}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = FocusUpColors.TextoSecundario
-                                )
-
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(
-                                        onClick = {
-                                            viewModel.validarEvidencia(ev.id, "APROBADA", "Evidencia aprobada correctamente.")
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.VerdeExito),
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Text("✓ Aprobar", color = Color.White, fontWeight = FontWeight.Bold)
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = {
-                                            idEvidenciaAValidar = ev.id
-                                            comentarioDocenteInput = ""
-                                            modalRechazoVisible = true
-                                        },
-                                        border = BorderStroke(1.dp, FocusUpColors.Error),
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Text("✗ Rechazar...", color = FocusUpColors.Error, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        state.evidenciasPendientes.forEach { ev ->
+                            ItemEvidenciaDocente(
+                                evidencia = ev,
+                                onAprobar = { viewModel.validarEvidencia(ev.id, "APROBADA") },
+                                onRechazar = {
+                                    idEvidenciaAValidar = ev.id
+                                    modalRechazoVisible = true
+                                },
+                                onVerFoto = { img -> fotoAmpliada = img }
+                            )
                         }
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(30.dp))
         }
 
-        // Feedback / Notificaciones Flotantes
-        state.mensaje?.let { msg ->
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 20.dp, start = 20.dp, end = 20.dp),
-                shape = RoundedCornerShape(14.dp),
-                color = FocusUpColors.TarjetaElevada,
-                border = BordeTarjetaNeon
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "💡 $msg", color = FocusUpColors.Texto, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { viewModel.limpiarMensajes() }) {
-                        Text("OK", color = FocusUpColors.AzulElectrico, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        state.error?.let { err ->
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 20.dp, start = 20.dp, end = 20.dp),
-                shape = RoundedCornerShape(14.dp),
-                color = FocusUpColors.ErrorFondo,
-                border = BorderStroke(1.dp, FocusUpColors.Error)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "⚠️ $err", color = FocusUpColors.ErrorTexto, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { viewModel.limpiarMensajes() }) {
-                        Text("Cerrar", color = FocusUpColors.Texto)
-                    }
-                }
-            }
-        }
-    }
-
-    // Modal para capturar o simular envío de fotografía real a POST /api/evidencias
-    if (mostrarModalSubirEvidencia) {
-        AlertDialog(
-            onDismissRequest = { mostrarModalSubirEvidencia = false },
-            containerColor = FocusUpColors.TarjetaElevada,
-            title = {
-                Text("📸 Envío de Evidencia Fotográfica", color = FocusUpColors.Texto, fontWeight = FontWeight.Bold)
-            },
-            text = {
-                Column {
-                    Text(
-                        "Captura la evidencia fotográfica de tu sesión de estudio. La imagen será enviada al servidor Ktor vía multipart/form-data:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = FocusUpColors.TextoSecundario
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
+        // DIÁLOGO MODAL: FOTO AMPLIADA
+        fotoAmpliada?.let { img ->
+            AlertDialog(
+                onDismissRequest = { fotoAmpliada = null },
+                containerColor = FocusUpColors.TarjetaElevada,
+                title = { Text("🔍 Evidencia Ampliada", color = FocusUpColors.Texto, fontWeight = FontWeight.Bold) },
+                text = {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(120.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(FocusUpColors.Tarjeta),
+                            .height(320.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.Black),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("📷", fontSize = 34.sp)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text("Sesión #${state.sesionIdActual ?: 0} vinculada", color = FocusUpColors.AzulElectrico, fontSize = 12.sp)
-                        }
+                        Image(
+                            bitmap = img,
+                            contentDescription = "Evidencia Completa",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { fotoAmpliada = null },
+                        colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.AzulElectrico)
+                    ) {
+                        Text("Cerrar", color = FocusUpColors.Fondo, fontWeight = FontWeight.Bold)
                     }
                 }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        mostrarModalSubirEvidencia = false
-                        viewModel.subirEvidencia(JpegMuestraBytes)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.AzulElectrico)
-                ) {
-                    Text("Enviar al Servidor (POST)", color = FocusUpColors.Fondo, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { mostrarModalSubirEvidencia = false }) {
-                    Text("Cancelar", color = FocusUpColors.TextoSecundario)
-                }
-            }
-        )
-    }
+            )
+        }
 
-    // Modal para que el docente introduzca motivo de rechazo
-    if (modalRechazoVisible && idEvidenciaAValidar != null) {
-        AlertDialog(
-            onDismissRequest = { modalRechazoVisible = false },
-            containerColor = FocusUpColors.TarjetaElevada,
-            title = {
-                Text("Rechazar Evidencia #$idEvidenciaAValidar", color = FocusUpColors.Texto, fontWeight = FontWeight.Bold)
-            },
-            text = {
-                Column {
-                    Text("Especifica el motivo del rechazo para que el estudiante tome una nueva fotografía:", style = MaterialTheme.typography.bodySmall, color = FocusUpColors.TextoSecundario)
-                    Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = comentarioDocenteInput,
-                        onValueChange = { comentarioDocenteInput = it },
-                        label = { Text("Motivo / Observación") },
-                        placeholder = { Text("Ej. Fotografía borrosa o notas no legibles.") },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = FocusUpColors.Error,
-                            unfocusedBorderColor = FocusUpColors.BordeCampo
+        // DIÁLOGO MODAL: RECHAZO CON COMENTARIO
+        if (modalRechazoVisible) {
+            AlertDialog(
+                onDismissRequest = { modalRechazoVisible = false },
+                containerColor = FocusUpColors.TarjetaElevada,
+                title = { Text("Rechazar Evidencia", color = FocusUpColors.ErrorTexto, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "Indica la razón por la cual rechazas la evidencia fotográfica:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = FocusUpColors.TextoSecundario
                         )
+                        OutlinedTextField(
+                            value = comentarioDocenteInput,
+                            onValueChange = { comentarioDocenteInput = it },
+                            placeholder = { Text("Ej. La imagen no corresponde a las notas o no es legible.") },
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 3
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            idEvidenciaAValidar?.let { id ->
+                                viewModel.validarEvidencia(id, "RECHAZADA", comentarioDocenteInput)
+                            }
+                            modalRechazoVisible = false
+                            comentarioDocenteInput = ""
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.Error)
+                    ) {
+                        Text("Confirmar Rechazo", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { modalRechazoVisible = false }) {
+                        Text("Cancelar", color = FocusUpColors.TextoSecundario)
+                    }
+                }
+            )
+        }
+
+        // DIÁLOGO MODAL: SUBIR EVIDENCIA SIMULADA/MUESTRA
+        if (mostrarModalSubirEvidencia) {
+            AlertDialog(
+                onDismissRequest = { mostrarModalSubirEvidencia = false },
+                containerColor = FocusUpColors.TarjetaElevada,
+                title = { Text("Enviar Evidencia Muestra", color = FocusUpColors.Texto, fontWeight = FontWeight.Bold) },
+                text = {
+                    Text(
+                        "Se enviará una imagen de prueba prediseñada al servidor para simular la captura de cámara en entornos de prueba.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = FocusUpColors.TextoSecundario
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            mostrarModalSubirEvidencia = false
+                            viewModel.subirEvidencia(JpegMuestraBytes)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.AzulElectrico)
+                    ) {
+                        Text("Enviar Evidencia Muestra", color = FocusUpColors.Fondo, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { mostrarModalSubirEvidencia = false }) {
+                        Text("Cancelar", color = FocusUpColors.TextoSecundario)
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ItemEvidenciaDocente(
+    evidencia: EvidenciaResumen,
+    onAprobar: () -> Unit,
+    onRechazar: () -> Unit,
+    onVerFoto: (ImageBitmap) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = FocusUpColors.Tarjeta),
+        border = BorderStroke(1.dp, FocusUpColors.AzulCyan.copy(alpha = 0.4f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = evidencia.estudiante,
+                    fontWeight = FontWeight.Bold,
+                    color = FocusUpColors.Texto,
+                    fontSize = 15.sp
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = FocusUpColors.AzulCyan.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        text = "Evidencia #${evidencia.id}",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = FocusUpColors.AzulCyan,
+                        fontWeight = FontWeight.Bold
                     )
                 }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val id = idEvidenciaAValidar!!
-                        val motivo = comentarioDocenteInput.ifBlank { "Fotografía no legible o incompleta." }
-                        viewModel.validarEvidencia(id, "RECHAZADA", motivo)
-                        modalRechazoVisible = false
-                        idEvidenciaAValidar = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.Error)
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "Objetivo: ${evidencia.objetivo}",
+                style = MaterialTheme.typography.bodySmall,
+                color = FocusUpColors.TextoSecundario
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            val imgBitmap = remember(evidencia.imagenBytes) {
+                evidencia.imagenBytes?.let { byteArrayToImageBitmap(it) }
+            }
+
+            if (imgBitmap != null) {
+                Image(
+                    bitmap = imgBitmap,
+                    contentDescription = "Foto de evidencia del estudiante",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onVerFoto(imgBitmap) },
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(80.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(FocusUpColors.TarjetaElevada)
+                        .clickable { },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text("Confirmar Rechazo", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { modalRechazoVisible = false }) {
-                    Text("Cancelar", color = FocusUpColors.TextoSecundario)
+                    Text("📷 Fotografía no precargada (Toca para ver)", style = MaterialTheme.typography.bodySmall, color = FocusUpColors.TextoSecundario)
                 }
             }
-        )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Button(
+                    onClick = onAprobar,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.VerdeExito),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("✓ Aprobar", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+
+                OutlinedButton(
+                    onClick = onRechazar,
+                    modifier = Modifier.weight(1f),
+                    border = BorderStroke(1.dp, FocusUpColors.Error),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("✗ Rechazar...", color = FocusUpColors.Error, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
     }
 }
 
 @Composable
 private fun EstadoBadge(estado: EstadoSesionEstudio) {
-    val (color, etiqueta) = when (estado) {
-        EstadoSesionEstudio.CONFIGURACION -> FocusUpColors.TextoSecundario to "MODO CONFIGURACIÓN"
-        EstadoSesionEstudio.EN_CURSO -> FocusUpColors.AzulElectrico to "⚡ SESIÓN EN CURSO"
-        EstadoSesionEstudio.PAUSADO -> FocusUpColors.Ambar to "⏸ TEMPORIZADOR EN PAUSA"
-        EstadoSesionEstudio.ESPERANDO_FOTO -> FocusUpColors.Ambar to "📷 ESPERANDO FOTOGRAFÍA"
-        EstadoSesionEstudio.SUBIENDO_EVIDENCIA -> FocusUpColors.AzulElectrico to "⬆ ENVIANDO FOTOGRAFÍA..."
+    val (colorBadge, textoBadge) = when (estado) {
+        EstadoSesionEstudio.CONFIGURACION -> FocusUpColors.TextoSecundario to "🎯 LISTO PARA COMENZAR"
+        EstadoSesionEstudio.EN_CURSO -> FocusUpColors.AzulElectrico to "⚡ EN CONCENTRACIÓN"
+        EstadoSesionEstudio.PAUSADO -> FocusUpColors.Ambar to "⏸ TEMPORIZADOR PAUSADO"
+        EstadoSesionEstudio.ESPERANDO_FOTO -> FocusUpColors.Ambar to "📸 ESPERANDO EVIDENCIA"
+        EstadoSesionEstudio.SUBIENDO_EVIDENCIA -> FocusUpColors.AzulElectrico to "📤 ENVIANDO FOTO..."
         EstadoSesionEstudio.PENDIENTE_VALIDACION -> FocusUpColors.AzulCyan to "⏳ EN REVISIÓN POR DOCENTE"
-        EstadoSesionEstudio.APROBADA -> FocusUpColors.VerdeExito to "✓ APROBADA • LIBERADO"
-        EstadoSesionEstudio.RECHAZADA -> FocusUpColors.Error to "✗ RECHAZADA POR DOCENTE"
+        EstadoSesionEstudio.APROBADA -> FocusUpColors.VerdeExito to "🎉 SESIÓN APROBADA Y LIBERADA"
+        EstadoSesionEstudio.RECHAZADA -> FocusUpColors.Error to "⚠️ EVIDENCIA RECHAZADA"
     }
 
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = color.copy(alpha = 0.15f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.4f))
+        shape = RoundedCornerShape(20.dp),
+        color = colorBadge.copy(alpha = 0.15f),
+        border = BorderStroke(1.dp, colorBadge.copy(alpha = 0.4f))
     ) {
         Text(
-            text = etiqueta,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
+            text = textoBadge,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = colorBadge,
             fontWeight = FontWeight.Bold
         )
     }

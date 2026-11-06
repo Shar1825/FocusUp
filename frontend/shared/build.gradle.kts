@@ -18,26 +18,26 @@ kotlin {
             isStatic = true
         }
     }
-    
+
     android {
-       namespace = "com.example.focusup.shared"
-       compileSdk = libs.versions.android.compileSdk.get().toInt()
-       minSdk = libs.versions.android.minSdk.get().toInt()
-    
-       compilerOptions {
-           jvmTarget = JvmTarget.JVM_11
-       }
-       androidResources {
-           enable = true
-       }
-       withHostTest {
-           isIncludeAndroidResources = true
-       }
-       withDeviceTestBuilder {
-           sourceSetTreeName = "test"
-       }.configure {
-           instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-       }
+        namespace = "com.example.focusup.shared"
+        compileSdk = libs.versions.android.compileSdk.get().toInt()
+        minSdk = libs.versions.android.minSdk.get().toInt()
+
+        compilerOptions {
+            jvmTarget = JvmTarget.JVM_11
+        }
+        androidResources {
+            enable = true
+        }
+        withHostTest {
+            isIncludeAndroidResources = true
+        }
+        withDeviceTestBuilder {
+            sourceSetTreeName = "test"
+        }.configure {
+            instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        }
     }
 
     sourceSets {
@@ -46,9 +46,10 @@ kotlin {
             implementation(libs.compose.uiTooling)
             // Engine HTTP para Android
             implementation("io.ktor:ktor-client-cio:3.0.0")
+            // Launcher para cámara en Android
+            implementation("androidx.activity:activity-compose:1.8.2")
         }
         iosMain.dependencies {
-            // Engine HTTP para iOS (el wizard no lo trae; sin esto el cliente no funciona en iPhone)
             implementation("io.ktor:ktor-client-darwin:3.0.0")
         }
         commonMain.dependencies {
@@ -64,6 +65,7 @@ kotlin {
             implementation("io.ktor:ktor-client-core:3.0.0")
             implementation("io.ktor:ktor-client-content-negotiation:3.0.0")
             implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.0")
+            implementation("io.ktor:ktor-client-cio:2.3.12")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

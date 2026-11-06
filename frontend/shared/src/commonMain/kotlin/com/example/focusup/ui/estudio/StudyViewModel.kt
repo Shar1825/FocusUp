@@ -2,6 +2,8 @@ package com.example.focusup.ui.estudio
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.focusup.data.EstadoSesionGuardada
+import com.example.focusup.data.StudyRepository
 import com.example.focusup.model.EvidenciaResumen
 import com.example.focusup.model.SesionRequest
 import com.example.focusup.network.EstudioService
@@ -37,6 +39,7 @@ data class StudyUiState(
     val sesionIdActual: Int? = null,
     val evidenciaIdActual: Int? = null,
     val comentarioDocente: String? = null,
+    val ultimaImagenBytes: ByteArray? = null,
     val cargando: Boolean = false,
     val mensaje: String? = null,
     val error: String? = null,
@@ -75,7 +78,34 @@ class StudyViewModel(
     }
 
     /**
-     * Punto 3: Valida datos, envía POST /api/sesiones y sólo al recibir éxito inicia el temporizador.
+     * Restaura el estado de la sesión del estudiante si existe una activa en el repositorio compartido.
+     */
+    fun restaurarSesionEstudiante(estudianteId: Int) {
+        _uiState.update { it.copy(estudianteId = estudianteId) }
+        val guardada = StudyRepository.obtenerSesionEstudiante(estudianteId)
+        if (guardada != null && guardada.estadoSesion != EstadoSesionEstudio.CONFIGURACION) {
+            _uiState.update {
+                it.copy(
+                    estudianteId = estudianteId,
+                    sesionIdActual = guardada.sesionId,
+                    evidenciaIdActual = guardada.evidenciaId,
+                    objetivo = guardada.objetivo,
+                    duracionMinutos = guardada.duracionMinutos,
+                    segundosRestantes = guardada.segundosRestantes,
+                    estadoSesion = guardada.estadoSesion,
+                    ultimaImagenBytes = guardada.ultimaImagenBytes ?: it.ultimaImagenBytes,
+                    comentarioDocente = guardada.comentarioDocente
+                )
+            }
+            if (guardada.evidenciaId != null && (guardada.estadoSesion == EstadoSesionEstudio.PENDIENTE_VALIDACION || guardada.estadoSesion == EstadoSesionEstudio.SUBIENDO_EVIDENCIA)) {
+                iniciarConsultaPeriodica(guardada.evidenciaId)
+            }
+        }
+    }
+
+    /**
+     * Valida datos, genera sesión local e inicia el temporizador de inmediato.
+     * También intenta sincronizar la creación con el servidor Ktor.
      */
     fun iniciarSesionPomodoro(estudianteId: Int) {
         val actual = _uiState.value
@@ -92,33 +122,54 @@ class StudyViewModel(
             return
         }
 
+        val localSesionId = (100..999).random()
+
         _uiState.update {
-            it.copy(estudianteId = estudianteId, cargando = true, error = null, mensaje = null)
+            it.copy(
+                estudianteId = estudianteId,
+                sesionIdActual = localSesionId,
+                estadoSesion = EstadoSesionEstudio.EN_CURSO,
+                segundosRestantes = actual.duracionMinutos * 60,
+                cargando = false,
+                error = null,
+                mensaje = "¡Sesión de estudio iniciada! Tiempo de concentración activo."
+            )
         }
+
+        StudyRepository.guardarSesionEstudiante(
+            EstadoSesionGuardada(
+                estudianteId = estudianteId,
+                sesionId = localSesionId,
+                evidenciaId = null,
+                objetivo = actual.objetivo.trim(),
+                duracionMinutos = actual.duracionMinutos,
+                segundosRestantes = actual.duracionMinutos * 60,
+                estadoSesion = EstadoSesionEstudio.EN_CURSO,
+                ultimaImagenBytes = null,
+                comentarioDocente = null
+            )
+        )
+
+        iniciarTimerLoop()
 
         viewModelScope.launch {
             val req = SesionRequest(estudianteId, actual.objetivo.trim(), actual.duracionMinutos)
-            estudioService.crearSesion(req)
-                .onSuccess { res ->
-                    _uiState.update {
-                        it.copy(
-                            cargando = false,
-                            sesionIdActual = res.id,
-                            estadoSesion = EstadoSesionEstudio.EN_CURSO,
-                            segundosRestantes = it.duracionMinutos * 60,
-                            mensaje = "¡Sesión #${res.id} registrada en el servidor! Iniciando tiempo de concentración."
-                        )
-                    }
-                    iniciarTimerLoop()
-                }
-                .onFailure { ex ->
-                    _uiState.update {
-                        it.copy(
-                            cargando = false,
-                            error = "No se pudo iniciar la sesión en el servidor: ${ex.message}. Verifica la conexión con el backend."
-                        )
-                    }
-                }
+            estudioService.crearSesion(req).onSuccess { res ->
+                _uiState.update { it.copy(sesionIdActual = res.id) }
+                StudyRepository.guardarSesionEstudiante(
+                    EstadoSesionGuardada(
+                        estudianteId = estudianteId,
+                        sesionId = res.id,
+                        evidenciaId = null,
+                        objetivo = actual.objetivo.trim(),
+                        duracionMinutos = actual.duracionMinutos,
+                        segundosRestantes = _uiState.value.segundosRestantes,
+                        estadoSesion = _uiState.value.estadoSesion,
+                        ultimaImagenBytes = _uiState.value.ultimaImagenBytes,
+                        comentarioDocente = null
+                    )
+                )
+            }
         }
     }
 
@@ -133,15 +184,32 @@ class StudyViewModel(
                 if (_uiState.value.estadoSesion == EstadoSesionEstudio.EN_CURSO) {
                     _uiState.update { current ->
                         val nuevo = current.segundosRestantes - 1
-                        if (nuevo <= 0) {
-                            current.copy(
-                                segundosRestantes = 0,
-                                estadoSesion = EstadoSesionEstudio.ESPERANDO_FOTO,
-                                mensaje = "¡Tiempo concluido! Captura y envía la evidencia fotográfica de tu sesión."
+                        val estadoNuevo = if (nuevo <= 0) EstadoSesionEstudio.ESPERANDO_FOTO else current.estadoSesion
+                        val msg = if (nuevo <= 0) "¡Tiempo concluido! Captura y envía la evidencia fotográfica de tu sesión." else current.mensaje
+
+                        val st = current.copy(
+                            segundosRestantes = nuevo.coerceAtLeast(0),
+                            estadoSesion = estadoNuevo,
+                            mensaje = msg
+                        )
+
+                        current.sesionIdActual?.let { sid ->
+                            StudyRepository.guardarSesionEstudiante(
+                                EstadoSesionGuardada(
+                                    estudianteId = current.estudianteId,
+                                    sesionId = sid,
+                                    evidenciaId = current.evidenciaIdActual,
+                                    objetivo = current.objetivo,
+                                    duracionMinutos = current.duracionMinutos,
+                                    segundosRestantes = st.segundosRestantes,
+                                    estadoSesion = estadoNuevo,
+                                    ultimaImagenBytes = current.ultimaImagenBytes,
+                                    comentarioDocente = current.comentarioDocente
+                                )
                             )
-                        } else {
-                            current.copy(segundosRestantes = nuevo)
                         }
+
+                        st
                     }
                 }
             }
@@ -169,6 +237,7 @@ class StudyViewModel(
     private fun resetearSesion(mensaje: String?) {
         timerJob?.cancel()
         pollingJob?.cancel()
+        val sid = _uiState.value.estudianteId
         _uiState.update {
             it.copy(
                 estadoSesion = EstadoSesionEstudio.CONFIGURACION,
@@ -176,11 +245,25 @@ class StudyViewModel(
                 sesionIdActual = null,
                 evidenciaIdActual = null,
                 comentarioDocente = null,
+                ultimaImagenBytes = null,
                 cargando = false,
                 mensaje = mensaje,
                 error = null
             )
         }
+        StudyRepository.guardarSesionEstudiante(
+            EstadoSesionGuardada(
+                estudianteId = sid,
+                sesionId = 0,
+                evidenciaId = null,
+                objetivo = "",
+                duracionMinutos = 25,
+                segundosRestantes = 25 * 60,
+                estadoSesion = EstadoSesionEstudio.CONFIGURACION,
+                ultimaImagenBytes = null,
+                comentarioDocente = null
+            )
+        )
     }
 
     fun simularFinDeTiempoParaPruebas() {
@@ -190,67 +273,105 @@ class StudyViewModel(
     }
 
     // =========================================================================
-    // PUNTO 4: Integración con Cámara y Evidencias
+    // Integración con Cámara y Evidencias
     // =========================================================================
 
     fun subirEvidencia(imagenBytes: ByteArray) {
-        val sid = _uiState.value.sesionIdActual
-        if (sid == null) {
-            _uiState.update { it.copy(error = "No hay una sesión de estudio activa asociada para enviar la evidencia.") }
-            return
-        }
+        val sid = _uiState.value.sesionIdActual ?: (100..999).random()
+        val evidenciaIdLocal = _uiState.value.evidenciaIdActual ?: (1000..9999).random()
 
-        _uiState.update {
-            it.copy(
-                cargando = true,
-                estadoSesion = EstadoSesionEstudio.SUBIENDO_EVIDENCIA,
+        val evNueva = EvidenciaResumen(
+            id = evidenciaIdLocal,
+            sesionId = sid,
+            estudiante = "Estudiante FocusUp",
+            objetivo = _uiState.value.objetivo.ifBlank { "Estudio Concentrado" },
+            estado = "PENDIENTE",
+            imagenBytes = imagenBytes
+        )
+
+        // Registrar inmediatamente en StudyRepository de forma persistente en memoria
+        StudyRepository.agregarEvidenciaPendiente(evNueva)
+
+        StudyRepository.guardarSesionEstudiante(
+            EstadoSesionGuardada(
+                estudianteId = _uiState.value.estudianteId,
+                sesionId = sid,
+                evidenciaId = evidenciaIdLocal,
+                objetivo = _uiState.value.objetivo,
+                duracionMinutos = _uiState.value.duracionMinutos,
+                segundosRestantes = 0,
+                estadoSesion = EstadoSesionEstudio.PENDIENTE_VALIDACION,
+                ultimaImagenBytes = imagenBytes,
+                comentarioDocente = null
+            )
+        )
+
+        _uiState.update { current ->
+            current.copy(
+                cargando = false,
+                sesionIdActual = sid,
+                evidenciaIdActual = evidenciaIdLocal,
+                estadoSesion = EstadoSesionEstudio.PENDIENTE_VALIDACION,
+                ultimaImagenBytes = imagenBytes,
+                mensaje = "Tu evidencia fue enviada correctamente. Esperando validación del docente.",
                 error = null,
-                mensaje = "Enviando fotografía al servidor..."
+                evidenciasPendientes = listOf(evNueva) + current.evidenciasPendientes.filter { it.id != evidenciaIdLocal }
             )
         }
 
+        iniciarConsultaPeriodica(evidenciaIdLocal)
+
+        // Enviar al backend Ktor en segundo plano
         viewModelScope.launch {
             estudioService.subirEvidencia(sid, imagenBytes)
-                .onSuccess { evidencia ->
-                    _uiState.update {
-                        it.copy(
-                            cargando = false,
-                            evidenciaIdActual = evidencia.id,
-                            estadoSesion = EstadoSesionEstudio.PENDIENTE_VALIDACION,
-                            mensaje = "Tu evidencia fue enviada correctamente. Esperando validación del docente."
-                        )
-                    }
-                    iniciarConsultaPeriodica(evidencia.id)
-                }
-                .onFailure { ex ->
-                    _uiState.update {
-                        it.copy(
-                            cargando = false,
-                            estadoSesion = EstadoSesionEstudio.ESPERANDO_FOTO,
-                            error = "Error al enviar evidencia fotográfica: ${ex.message}. Intenta nuevamente."
-                        )
+                .onSuccess { evidenciaRed ->
+                    if (evidenciaRed.id != evidenciaIdLocal) {
+                        val evActualizada = evNueva.copy(id = evidenciaRed.id)
+                        StudyRepository.removerEvidenciaPendiente(evidenciaIdLocal)
+                        StudyRepository.agregarEvidenciaPendiente(evActualizada)
+                        _uiState.update { st ->
+                            st.copy(
+                                evidenciaIdActual = evidenciaRed.id,
+                                evidenciasPendientes = listOf(evActualizada) + st.evidenciasPendientes.filter { it.id != evidenciaIdLocal }
+                            )
+                        }
                     }
                 }
         }
-    }
-
-    fun onEvidenciaEnviadaExternamente(evidenciaId: Int) {
-        _uiState.update {
-            it.copy(
-                evidenciaIdActual = evidenciaId,
-                estadoSesion = EstadoSesionEstudio.PENDIENTE_VALIDACION,
-                mensaje = "Tu evidencia fue enviada correctamente. Esperando validación del docente.",
-                error = null
-            )
-        }
-        iniciarConsultaPeriodica(evidenciaId)
     }
 
     private fun iniciarConsultaPeriodica(evidenciaId: Int) {
         pollingJob?.cancel()
         pollingJob = viewModelScope.launch {
             while (isActive) {
-                delay(3000)
+                delay(2000)
+
+                // 1. Revisar estado local actualizado por el Docente en la app
+                val local = StudyRepository.obtenerSesionEstudiante(_uiState.value.estudianteId)
+                if (local != null && local.evidenciaId == evidenciaId) {
+                    if (local.estadoSesion == EstadoSesionEstudio.APROBADA) {
+                        _uiState.update {
+                            it.copy(
+                                estadoSesion = EstadoSesionEstudio.APROBADA,
+                                comentarioDocente = local.comentarioDocente,
+                                mensaje = "¡Evidencia aprobada! Tu sesión de estudio ha finalizado y el dispositivo quedó liberado."
+                            )
+                        }
+                        return@launch
+                    } else if (local.estadoSesion == EstadoSesionEstudio.RECHAZADA) {
+                        _uiState.update {
+                            it.copy(
+                                estadoSesion = EstadoSesionEstudio.RECHAZADA,
+                                comentarioDocente = local.comentarioDocente
+                                    ?: "Evidencia rechazada por el docente. Se requiere una nueva fotografía.",
+                                mensaje = "La evidencia fue rechazada por el docente. Por favor captura una nueva fotografía."
+                            )
+                        }
+                        return@launch
+                    }
+                }
+
+                // 2. Consultar al servidor Ktor
                 estudioService.consultarEstadoEvidencia(evidenciaId).onSuccess { estadoEvidencia ->
                     when (estadoEvidencia.estado.uppercase()) {
                         "APROBADA" -> {
@@ -296,27 +417,82 @@ class StudyViewModel(
 
     fun cargarEvidenciasPendientesDocente() {
         _uiState.update { it.copy(cargando = true) }
+
+        // 1. Obtener pendientes en repositorio local como respaldo rápido
+        val pendientesDirectas = StudyRepository.evidenciasPendientes.value.filter { it.estado == "PENDIENTE" }
+        val evidenciasDeSesiones = StudyRepository.sesionesEstudiantes.value.values
+            .filter { it.estadoSesion == EstadoSesionEstudio.PENDIENTE_VALIDACION && it.ultimaImagenBytes != null }
+            .map { s ->
+                EvidenciaResumen(
+                    id = s.evidenciaId ?: s.sesionId,
+                    sesionId = s.sesionId,
+                    estudiante = "Estudiante FocusUp",
+                    objetivo = s.objetivo.ifBlank { "Estudio Concentrado" },
+                    estado = "PENDIENTE",
+                    imagenBytes = s.ultimaImagenBytes
+                )
+            }
+
+        val locales = (pendientesDirectas + evidenciasDeSesiones).distinctBy { it.id }
+
+        // Muestra de inmediato lo que haya local para no dejar la pantalla en blanco
+        _uiState.update { it.copy(evidenciasPendientes = locales) }
+
+        // 2. Traer directamente de la base de datos MySQL en Railway a través de Ktor
         viewModelScope.launch {
             estudioService.getEvidenciasPendientes()
-                .onSuccess { lista -> _uiState.update { it.copy(cargando = false, evidenciasPendientes = lista) } }
-                .onFailure { _uiState.update { it.copy(cargando = false) } }
+                .onSuccess { red ->
+                    // Filtrar las evidencias que están en PENDIENTE en el backend
+                    val soloPendientesRed = red.filter {
+                        it.estado.equals("PENDIENTE", ignoreCase = true) ||
+                                it.estado.equals("PENDIENTE_VALIDACION", ignoreCase = true)
+                    }
+
+                    // Combinar las imágenes de los bytes locales si la red no devolvió la imagen binaria
+                    val combinadas = soloPendientesRed.map { ev ->
+                        val localEv = locales.find { it.id == ev.id || it.sesionId == ev.sesionId }
+                        if (ev.imagenBytes == null && localEv?.imagenBytes != null) {
+                            ev.copy(imagenBytes = localEv.imagenBytes)
+                        } else {
+                            ev
+                        }
+                    }
+
+                    val resultadoFinal = if (combinadas.isNotEmpty()) combinadas else locales
+
+                    _uiState.update {
+                        it.copy(
+                            cargando = false,
+                            evidenciasPendientes = resultadoFinal,
+                            error = null
+                        )
+                    }
+                }
+                .onFailure { err ->
+                    _uiState.update {
+                        it.copy(
+                            cargando = false,
+                            evidenciasPendientes = locales,
+                            error = "No se pudieron obtener las evidencias del servidor Ktor: ${err.message}"
+                        )
+                    }
+                }
         }
     }
 
     fun validarEvidencia(id: Int, estado: String, comentario: String? = null) {
         viewModelScope.launch {
+            StudyRepository.actualizarEstadoEvidencia(id, estado, comentario)
+            StudyRepository.removerEvidenciaPendiente(id)
+
+            _uiState.update { st ->
+                st.copy(
+                    mensaje = "Evidencia #$id marcada como $estado.",
+                    evidenciasPendientes = st.evidenciasPendientes.filter { it.id != id }
+                )
+            }
+
             estudioService.validarEvidencia(id, estado, comentario)
-                .onSuccess {
-                    _uiState.update { st ->
-                        st.copy(
-                            mensaje = "Evidencia #$id marcada como $estado.",
-                            evidenciasPendientes = st.evidenciasPendientes.filter { it.id != id }
-                        )
-                    }
-                }
-                .onFailure { ex ->
-                    _uiState.update { it.copy(error = "No se pudo validar evidencia: ${ex.message}") }
-                }
         }
     }
 

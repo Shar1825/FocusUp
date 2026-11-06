@@ -1,5 +1,6 @@
 package com.example.focusup.network
 
+import com.example.focusup.model.ApiResponse
 import com.example.focusup.model.EvidenciaEstado
 import com.example.focusup.model.EvidenciaResumen
 import com.example.focusup.model.SesionRequest
@@ -13,7 +14,7 @@ import io.ktor.http.*
 import kotlinx.coroutines.CancellationException
 
 /**
- * Servicio de Red para Sesiones de Estudio y Evidencias (/api/sesiones, /api/evidencias)
+- Servicio de Red para Sesiones de Estudio y Evidencias (/api/sesiones, /api/evidencias)
  */
 class EstudioService {
 
@@ -70,7 +71,19 @@ class EstudioService {
         return try {
             val response = block()
             if (response.status == HttpStatusCode.OK || response.status == HttpStatusCode.Created) {
-                Result.success(response.body<T>())
+                // Intenta primero parsear la respuesta directa
+                val directResult = runCatching { response.body<T>() }.getOrNull()
+                if (directResult != null) {
+                    Result.success(directResult)
+                } else {
+                    // Si falla, intenta parsear envuelto en ApiResponse<T>
+                    val wrappedResult = runCatching { response.body<ApiResponse<T>>() }.getOrNull()
+                    if (wrappedResult?.data != null) {
+                        Result.success(wrappedResult.data)
+                    } else {
+                        Result.failure(Exception("No se pudo deserializar la respuesta del servidor."))
+                    }
+                }
             } else {
                 Result.failure(Exception("Error HTTP ${response.status.value}"))
             }

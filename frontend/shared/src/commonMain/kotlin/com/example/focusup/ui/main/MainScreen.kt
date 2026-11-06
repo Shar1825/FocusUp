@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import com.example.focusup.model.LoginResponse
 import com.example.focusup.model.Rol
 import com.example.focusup.ui.estudio.StudyScreen
+import com.example.focusup.ui.estudio.StudyViewModel
 import com.example.focusup.ui.tareas.TasksScreen
 import com.example.focusup.ui.theme.BordeTarjeta
 import com.example.focusup.ui.theme.BordeTarjetaNeon
@@ -51,7 +52,7 @@ data class TareaUI(
     val titulo: String,
     val materia: String,
     val fechaEntrega: String,
-    val prioridad: String, // "Alta", "Media", "Baja"
+    val prioridad: String,
     val completada: Boolean = false
 )
 
@@ -60,8 +61,8 @@ data class ActividadDiaUI(
     val id: Int,
     val hora: String,
     val titulo: String,
-    val tipo: String, // "Estudio", "Entrega", "Clase"
-    val estado: String // "Completado", "En progreso", "Próximo"
+    val tipo: String,
+    val estado: String
 )
 
 /** Contenido adaptativo según rol */
@@ -123,10 +124,6 @@ private fun Rol.etiqueta(): String = when (this) {
     Rol.ESTUDIANTE -> "Estudiante"
 }
 
-/**
- * Pantalla Principal de FocusUp (MainScreen).
- * Presenta un diseño moderno, futurista y profesional con tonos oscuros y neón eléctrico.
- */
 @Composable
 fun MainScreen(
     usuario: LoginResponse,
@@ -137,7 +134,8 @@ fun MainScreen(
     var mostrarDialogoSesionEstudio by remember { mutableStateOf(false) }
     var mensajeSnack by remember { mutableStateOf<String?>(null) }
 
-    // Estado inicial de tareas interactivas
+    val studyViewModel = remember { StudyViewModel() }
+
     var listaTareas by remember {
         mutableStateOf(
             listOf(
@@ -149,7 +147,6 @@ fun MainScreen(
         )
     }
 
-    // Actividades del día
     val listaActividades = remember {
         listOf(
             ActividadDiaUI(1, "08:00 - 09:30", "Clase de Programación Kotlin", "Clase", "Completado"),
@@ -178,10 +175,8 @@ fun MainScreen(
                 .widthIn(max = 720.dp)
                 .align(Alignment.TopCenter)
         ) {
-            // Header Futurista
             HeaderFuturista(usuario = usuario)
 
-            // Contenido según el Tab activo
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -204,7 +199,10 @@ fun MainScreen(
                             onSubirEvidencia = { tabActual = MainTab.ESTUDIO }
                         )
 
-                        MainTab.ESTUDIO -> StudyScreen(usuario = usuario)
+                        MainTab.ESTUDIO -> StudyScreen(
+                            usuario = usuario,
+                            viewModel = studyViewModel
+                        )
 
                         MainTab.TAREAS -> TasksScreen(usuario = usuario)
 
@@ -216,14 +214,12 @@ fun MainScreen(
                 }
             }
 
-            // Navegación Inferior Futurista
             NavegacionInferiorFuturista(
                 tabSeleccionado = tabActual,
                 onTabSeleccionado = { tabActual = it }
             )
         }
 
-        // SnackBar de confirmación rápida
         mensajeSnack?.let { msg ->
             Surface(
                 modifier = Modifier
@@ -252,7 +248,6 @@ fun MainScreen(
             }
         }
 
-        // Diálogo para Nueva Tarea
         if (mostrarDialogoNuevaTarea) {
             DialogoNuevaTarea(
                 onDesestimar = { mostrarDialogoNuevaTarea = false },
@@ -271,7 +266,6 @@ fun MainScreen(
             )
         }
 
-        // Diálogo para Iniciar Sesión de Estudio
         if (mostrarDialogoSesionEstudio) {
             DialogoIniciarEstudio(
                 onDesestimar = { mostrarDialogoSesionEstudio = false },
@@ -285,11 +279,10 @@ fun MainScreen(
     }
 }
 
-/** Header superior con saludo personalizado y badge de rol */
 @Composable
 private fun HeaderFuturista(usuario: LoginResponse) {
     val saludo = remember {
-        val hora = 12 // Determina saludo
+        val hora = 12
         when {
             hora < 12 -> "¡Buenos días!"
             hora < 19 -> "¡Buenas tardes!"
@@ -307,7 +300,6 @@ private fun HeaderFuturista(usuario: LoginResponse) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Avatar con halo neón
                 Box(
                     modifier = Modifier
                         .size(50.dp)
@@ -349,7 +341,6 @@ private fun HeaderFuturista(usuario: LoginResponse) {
                 }
             }
 
-            // Chip Neón del Rol
             Surface(
                 shape = RoundedCornerShape(20.dp),
                 color = FocusUpColors.TarjetaElevada,
@@ -378,7 +369,6 @@ private fun HeaderFuturista(usuario: LoginResponse) {
     }
 }
 
-/** Dashboard Tab Principal */
 @Composable
 private fun DashboardTabContent(
     usuario: LoginResponse,
@@ -396,7 +386,6 @@ private fun DashboardTabContent(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
     ) {
-        // Banner de Estado Futurista
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
@@ -448,7 +437,6 @@ private fun DashboardTabContent(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // 1. Resumen de Productividad
         Text(
             text = "Resumen de Productividad",
             style = MaterialTheme.typography.titleLarge,
@@ -463,7 +451,6 @@ private fun DashboardTabContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // 2. Accesos Rápido
         Text(
             text = "Accesos Rápidos",
             style = MaterialTheme.typography.titleMedium,
@@ -523,7 +510,6 @@ private fun DashboardTabContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // 3. Tareas Pendientes
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -550,7 +536,6 @@ private fun DashboardTabContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // 4. Actividades del Día
         Text(
             text = "Actividades de Hoy",
             style = MaterialTheme.typography.titleMedium,
@@ -565,16 +550,10 @@ private fun DashboardTabContent(
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // 5. Progreso Semanal de Enfoque
-        GraficoProgresoSemanal()
-
         Spacer(modifier = Modifier.height(30.dp))
     }
 }
 
-/** Grid de tarjetas de métricas de productividad */
 @Composable
 private fun GridProductividad() {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -626,7 +605,6 @@ private fun GridProductividad() {
     }
 }
 
-/** Tarjeta individual de métrica */
 @Composable
 private fun MetricaCard(
     titulo: String,
@@ -673,7 +651,6 @@ private fun MetricaCard(
     }
 }
 
-/** Botón de Acceso Rápido estilo futurista con gradiente */
 @Composable
 private fun AccesoRapidoCard(
     titulo: String,
@@ -692,7 +669,7 @@ private fun AccesoRapidoCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(gradient.apply { })
+                .background(gradient)
                 .padding(14.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -726,7 +703,6 @@ private fun AccesoRapidoCard(
     }
 }
 
-/** Item de Tarea con checkbox y badge de prioridad */
 @Composable
 private fun ItemTareaFuturista(
     tarea: TareaUI,
@@ -807,7 +783,6 @@ private fun ItemTareaFuturista(
     }
 }
 
-/** Item de actividad del día */
 @Composable
 private fun ItemActividadDia(actividad: ActividadDiaUI) {
     val (colorEstado, labelEstado) = when (actividad.estado) {
@@ -862,265 +837,126 @@ private fun ItemActividadDia(actividad: ActividadDiaUI) {
     }
 }
 
-/** Gráfico simple de progreso semanal de estudio */
-@Composable
-private fun GraficoProgresoSemanal() {
-    val dias = listOf("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
-    val horas = listOf(2.5f, 4.0f, 3.0f, 4.5f, 3.5f, 1.5f, 2.0f)
-    val maxHoras = 5.0f
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = FocusUpColors.Tarjeta),
-        border = BordeTarjeta
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Progreso Semanal (Horas de Enfoque)",
-                    fontWeight = FontWeight.Bold,
-                    color = FocusUpColors.Texto,
-                    fontSize = 15.sp
-                )
-                Text(
-                    text = "Total: 21 hrs",
-                    color = FocusUpColors.AzulElectrico,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(130.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                dias.zip(horas).forEach { (dia, hrs) ->
-                    val pct = (hrs / maxHoras).coerceIn(0.1f, 1.0f)
-                    val esHoy = dia == "Vie"
-
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = "${hrs}h",
-                            fontSize = 10.sp,
-                            color = if (esHoy) FocusUpColors.AzulElectrico else FocusUpColors.TextoSecundario,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .width(18.dp)
-                                .fillMaxHeight(pct)
-                                .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
-                                .background(
-                                    if (esHoy) Brush.verticalGradient(
-                                        listOf(FocusUpColors.AzulElectrico, FocusUpColors.AzulNeon)
-                                    ) else Brush.verticalGradient(
-                                        listOf(FocusUpColors.PurpuraNeon.copy(alpha = 0.7f), FocusUpColors.TarjetaElevada)
-                                    )
-                                )
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = dia,
-                            fontSize = 11.sp,
-                            color = if (esHoy) FocusUpColors.AzulElectrico else FocusUpColors.TextoSecundario,
-                            fontWeight = if (esHoy) FontWeight.Bold else FontWeight.Normal
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-
-/** Contenido del Módulo de Perfil y Rol (Tab 4) */
 @Composable
 private fun ModuloPerfilContent(
     usuario: LoginResponse,
     onCerrarSesion: () -> Unit
 ) {
-    val panel = panelPara(usuario.rol)
-
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(20.dp)
+            .padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Tarjeta de Usuario
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = FocusUpColors.TarjetaElevada),
-            border = BordeTarjetaNeon
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.radialGradient(
-                                    listOf(FocusUpColors.AzulElectrico, FocusUpColors.AzulNeon)
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = usuario.nombre.take(1).uppercase(),
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = FocusUpColors.Fondo
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Column {
-                        Text(
-                            text = usuario.nombre,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = FocusUpColors.Texto
-                        )
-                        Text(
-                            text = usuario.correo,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = FocusUpColors.TextoSecundario
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = FocusUpColors.AzulElectrico.copy(alpha = 0.15f),
-                    border = BorderStroke(1.dp, FocusUpColors.AzulElectrico.copy(alpha = 0.5f))
-                ) {
-                    Text(
-                        text = "Rol Autenticado: ${usuario.rol.etiqueta()}",
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = FocusUpColors.AzulElectrico,
-                        fontWeight = FontWeight.Bold
+        Box(
+            modifier = Modifier
+                .size(90.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.sweepGradient(
+                        listOf(FocusUpColors.AzulElectrico, FocusUpColors.PurpuraNeon, FocusUpColors.AzulElectrico)
                     )
-                }
-            }
+                )
+                .padding(3.dp)
+                .clip(CircleShape)
+                .background(FocusUpColors.TarjetaElevada),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = usuario.nombre.take(1).uppercase(),
+                fontSize = 38.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = FocusUpColors.AzulElectrico
+            )
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // Métricas Clave por Rol
         Text(
-            text = "Métricas por Rol",
-            style = MaterialTheme.typography.titleMedium,
+            text = usuario.nombre,
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = FocusUpColors.Texto
         )
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = usuario.correo,
+            style = MaterialTheme.typography.bodyMedium,
+            color = FocusUpColors.TextoSecundario
+        )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = FocusUpColors.AzulElectrico.copy(alpha = 0.15f),
+            border = BorderStroke(1.dp, FocusUpColors.AzulElectrico.copy(alpha = 0.4f))
         ) {
-            panel.metricasClave.forEach { (metrica, valor) ->
-                Card(
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = FocusUpColors.Tarjeta),
-                    border = BordeTarjeta
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(text = metrica, style = MaterialTheme.typography.labelSmall, color = FocusUpColors.TextoSecundario)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(text = valor, fontWeight = FontWeight.Bold, color = FocusUpColors.AzulElectrico, fontSize = 15.sp)
-                    }
-                }
-            }
+            Text(
+                text = usuario.rol.etiqueta(),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = FocusUpColors.AzulElectrico,
+                fontWeight = FontWeight.Bold
+            )
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        // Panel de acciones según Rol
+        val panelInfo = remember(usuario.rol) { panelPara(usuario.rol) }
+
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = FocusUpColors.Tarjeta),
-            border = BordeTarjeta
+            colors = CardDefaults.cardColors(containerColor = FocusUpColors.TarjetaElevada),
+            border = BordeTarjetaNeon
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
-                    text = panel.titulo,
+                    text = panelInfo.titulo,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = FocusUpColors.AzulElectrico
+                    color = FocusUpColors.Texto
                 )
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = panel.descripcion,
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = panelInfo.descripcion,
+                    style = MaterialTheme.typography.bodySmall,
                     color = FocusUpColors.TextoSecundario
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                panel.acciones.forEach { accion ->
+                panelInfo.metricasClave.forEach { (label, valStr) ->
                     Row(
-                        modifier = Modifier.padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.Top
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(text = "⚡", fontSize = 14.sp)
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = accion,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = FocusUpColors.Texto
-                        )
+                        Text(text = label, color = FocusUpColors.TextoSecundario, fontSize = 13.sp)
+                        Text(text = valStr, color = FocusUpColors.AzulElectrico, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(30.dp))
 
-        // Botón Cerrar Sesión
-        OutlinedButton(
+        Button(
             onClick = onCerrarSesion,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp),
+                .height(50.dp),
             shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, FocusUpColors.Error)
+            colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.Error)
         ) {
-            Text(text = "🚪 Cerrar Sesión", color = FocusUpColors.Error, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text("Cerrar Sesión", color = Color.White, fontWeight = FontWeight.Bold)
         }
-
-        Spacer(modifier = Modifier.height(30.dp))
     }
 }
 
-/** Barra de Navegación Inferior Futurista */
 @Composable
 private fun NavegacionInferiorFuturista(
     tabSeleccionado: MainTab,
@@ -1128,61 +964,43 @@ private fun NavegacionInferiorFuturista(
 ) {
     Surface(
         color = FocusUpColors.TarjetaElevada,
-        border = BorderStroke(1.dp, FocusUpColors.Borde),
-        modifier = Modifier.fillMaxWidth()
+        tonalElevation = 8.dp,
+        border = BorderStroke(1.dp, FocusUpColors.Borde)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp, horizontal = 12.dp),
+                .padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
             MainTab.entries.forEach { tab ->
-                val activo = tab == tabSeleccionado
+                val seleccionado = tab == tabSeleccionado
                 val colorIcono by animateColorAsState(
-                    if (activo) FocusUpColors.AzulElectrico else FocusUpColors.TextoSecundario,
-                    animationSpec = tween(300)
+                    if (seleccionado) FocusUpColors.AzulElectrico else FocusUpColors.TextoSecundario,
+                    label = "color_tab"
                 )
 
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
                         .clickable { onTabSeleccionado(tab) }
                         .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
-                    Text(
-                        text = tab.icono,
-                        fontSize = if (activo) 22.sp else 18.sp
-                    )
-
+                    Text(text = tab.icono, fontSize = 20.sp)
                     Spacer(modifier = Modifier.height(2.dp))
-
                     Text(
                         text = tab.titulo,
                         fontSize = 11.sp,
-                        fontWeight = if (activo) FontWeight.Bold else FontWeight.Medium,
+                        fontWeight = if (seleccionado) FontWeight.Bold else FontWeight.Normal,
                         color = colorIcono
                     )
-
-                    if (activo) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Box(
-                            modifier = Modifier
-                                .width(12.dp)
-                                .height(2.dp)
-                                .clip(CircleShape)
-                                .background(FocusUpColors.AzulElectrico)
-                        )
-                    }
                 }
             }
         }
     }
 }
 
-/** Diálogo para agregar nueva tarea */
 @Composable
 private fun DialogoNuevaTarea(
     onDesestimar: () -> Unit,
@@ -1195,61 +1013,29 @@ private fun DialogoNuevaTarea(
     AlertDialog(
         onDismissRequest = onDesestimar,
         containerColor = FocusUpColors.TarjetaElevada,
-        title = {
-            Text(
-                text = "➕ Nueva Tarea",
-                color = FocusUpColors.Texto,
-                fontWeight = FontWeight.Bold
-            )
-        },
+        title = { Text("Nueva Tarea", color = FocusUpColors.Texto, fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = titulo,
                     onValueChange = { titulo = it },
                     label = { Text("Título de la tarea") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = FocusUpColors.AzulElectrico,
-                        unfocusedBorderColor = FocusUpColors.BordeCampo
-                    )
+                    modifier = Modifier.fillMaxWidth()
                 )
-
                 OutlinedTextField(
                     value = materia,
                     onValueChange = { materia = it },
-                    label = { Text("Asignatura / Materia") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = FocusUpColors.AzulElectrico,
-                        unfocusedBorderColor = FocusUpColors.BordeCampo
-                    )
+                    label = { Text("Materia / Asignatura") },
+                    modifier = Modifier.fillMaxWidth()
                 )
-
-                Text("Prioridad:", style = MaterialTheme.typography.labelMedium, color = FocusUpColors.TextoSecundario)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Alta", "Media", "Baja").forEach { p ->
-                        FilterChip(
-                            selected = prioridad == p,
-                            onClick = { prioridad = p },
-                            label = { Text(p) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = FocusUpColors.AzulElectrico,
-                                selectedLabelColor = FocusUpColors.Fondo
-                            )
-                        )
-                    }
-                }
             }
         },
         confirmButton = {
             Button(
-                onClick = {
-                    if (titulo.isNotBlank()) onGuardar(titulo, materia.ifBlank { "General" }, prioridad)
-                },
+                onClick = { if (titulo.isNotBlank()) onGuardar(titulo, materia, prioridad) },
                 colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.AzulElectrico)
             ) {
-                Text("Guardar Tarea", color = FocusUpColors.Fondo, fontWeight = FontWeight.Bold)
+                Text("Guardar", color = FocusUpColors.Fondo, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
@@ -1260,7 +1046,6 @@ private fun DialogoNuevaTarea(
     )
 }
 
-/** Diálogo para iniciar sesión de estudio */
 @Composable
 private fun DialogoIniciarEstudio(
     onDesestimar: () -> Unit,
@@ -1272,45 +1057,19 @@ private fun DialogoIniciarEstudio(
     AlertDialog(
         onDismissRequest = onDesestimar,
         containerColor = FocusUpColors.TarjetaElevada,
-        title = {
-            Text(
-                text = "🚀 Iniciar Sesión Pomodoro",
-                color = FocusUpColors.Texto,
-                fontWeight = FontWeight.Bold
-            )
-        },
+        title = { Text("Iniciar Enfoque Pomodoro", color = FocusUpColors.Texto, fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = "Selecciona el tiempo objetivo para concentrarte sin distracciones:",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = FocusUpColors.TextoSecundario
-                )
-
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Selecciona la duración deseada para tu sesión:", style = MaterialTheme.typography.bodyMedium, color = FocusUpColors.TextoSecundario)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(15, 25, 45, 60).forEach { m ->
                         FilterChip(
                             selected = minutos == m,
                             onClick = { minutos = m },
-                            label = { Text("${m}m") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = FocusUpColors.AzulElectrico,
-                                selectedLabelColor = FocusUpColors.Fondo
-                            )
+                            label = { Text("${m}m") }
                         )
                     }
                 }
-
-                OutlinedTextField(
-                    value = materia,
-                    onValueChange = { materia = it },
-                    label = { Text("Objetivo / Materia") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = FocusUpColors.AzulElectrico,
-                        unfocusedBorderColor = FocusUpColors.BordeCampo
-                    )
-                )
             }
         },
         confirmButton = {
@@ -1318,7 +1077,7 @@ private fun DialogoIniciarEstudio(
                 onClick = { onComenzar(minutos, materia) },
                 colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.AzulElectrico)
             ) {
-                Text("Comenzar", color = FocusUpColors.Fondo, fontWeight = FontWeight.Bold)
+                Text("Iniciar Pomodoro", color = FocusUpColors.Fondo, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
