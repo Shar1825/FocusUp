@@ -20,6 +20,7 @@ import io.ktor.server.config.MapApplicationConfig
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation as ServerContentNegotiation
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
+import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -32,18 +33,15 @@ import kotlin.test.assertTrue
  */
 class LoginRoutesTest {
 
-    /**
-     * Monta el servidor de pruebas con serialización JSON y las rutas reales; devuelve un cliente.
-     * Se vacía la configuración (application.yaml) para que el módulo del servidor real no se
-     * cargue por duplicado y los plugins no se instalen dos veces.
-     */
     private fun ApplicationTestBuilder.configurar(): HttpClient {
         environment { config = MapApplicationConfig() }
         application {
-            install(ServerContentNegotiation) { json() }
+            install(ServerContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
             configureRouting()
         }
-        return createClient { install(ClientContentNegotiation) { json() } }
+        return createClient {
+            install(ClientContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
     }
 
     private suspend fun HttpClient.login(correo: String, password: String) =
