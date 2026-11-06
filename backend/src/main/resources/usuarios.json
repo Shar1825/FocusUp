@@ -3,21 +3,24 @@
     "id": 1,
     "nombre": "Administrador FocusUp",
     "correo": "admin@focusup.com",
-    "password": "contraseña",
-    "rol": "ADMINISTRADOR"
+    "password": "admin123",
+    "rol": "ADMINISTRADOR",
+    "activo": true
   },
   {
     "id": 2,
     "nombre": "Docente FocusUp",
     "correo": "docente@focusup.com",
-    "password": "contraseña",
-    "rol": "DOCENTE"
+    "password": "docente123",
+    "rol": "DOCENTE",
+    "activo": true
   },
   {
     "id": 3,
     "nombre": "Estudiante FocusUp",
     "correo": "estudiante@focusup.com",
-    "password": "contraseña",
-    "rol": "ESTUDIANTE"
+    "password": "estudiante123",
+    "rol": "ESTUDIANTE",
+    "activo": true
   }
 ]

@@ -2,32 +2,84 @@ package com.focusup.model
 
 import kotlinx.serialization.Serializable
 
-/** Roles de la aplicación. Cada rol tiene su propia vista en el frontend. */
+/** Roles del sistema FocusUp. */
 @Serializable
 enum class Rol {
     ADMINISTRADOR,
+    ADMIN,
     DOCENTE,
-    ESTUDIANTE
+    ESTUDIANTE;
+
+    fun esAdmin(): Boolean = this == ADMINISTRADOR || this == ADMIN
 }
 
-/** Usuario completo, tal como está en usuarios.json (incluye la contraseña). Nunca se envía al cliente. */
+/** Objeto Usuario completo (almacenado en DB/JSON). Contraseña en hash/protegida. */
 @Serializable
 data class Usuario(
     val id: Int,
     val nombre: String,
     val correo: String,
     val password: String,
-    val rol: Rol
+    val rol: Rol,
+    val activo: Boolean = true
 )
 
-/** Cuerpo de la petición POST /api/login. */
+/** Resumen de usuario seguro para ser devuelto al frontend (sin contraseña). */
+@Serializable
+data class UserDto(
+    val id: Int,
+    val nombre: String,
+    val correo: String,
+    val rol: Rol,
+    val activo: Boolean = true
+)
+
+/** Perfil extendido de Administrador. */
+@Serializable
+data class AdminProfile(
+    val id: Int,
+    val nombre: String,
+    val correo: String,
+    val rol: Rol = Rol.ADMINISTRADOR,
+    val departamento: String = "Administración Central",
+    val ultimoAcceso: String? = null
+)
+
+/** Perfil extendido de Docente. */
+@Serializable
+data class TeacherProfile(
+    val id: Int,
+    val nombre: String,
+    val correo: String,
+    val rol: Rol = Rol.DOCENTE,
+    val especialidad: String = "General",
+    val gruposAsignadosCount: Int = 0,
+    val totalEstudiantesCount: Int = 0
+)
+
+/** Perfil extendido de Estudiante. */
+@Serializable
+data class StudentProfile(
+    val id: Int,
+    val nombre: String,
+    val correo: String,
+    val rol: Rol = Rol.ESTUDIANTE,
+    val matricula: String = "EST-${1000}",
+    val promedioGeneral: Double = 0.0,
+    val actividadesCompletadas: Int = 0
+)
+
+/** Petición de inicio de sesión. Soporta tanto "correo" como "email". */
 @Serializable
 data class LoginRequest(
-    val correo: String,
-    val password: String
-)
+    val correo: String = "",
+    val password: String = "",
+    val email: String? = null
+) {
+    val correoEfectivo: String get() = email?.takeIf { it.isNotBlank() } ?: correo
+}
 
-/** Respuesta exitosa del login: los datos del usuario SIN la contraseña. */
+/** Respuesta exitosa del login (manteniendo retrocompatibilidad). */
 @Serializable
 data class LoginResponse(
     val id: Int,
@@ -36,7 +88,7 @@ data class LoginResponse(
     val rol: Rol
 )
 
-/** Cuerpo de las respuestas de error (401 y 400). */
+/** Respuesta de error legacy. */
 @Serializable
 data class ErrorResponse(
     val mensaje: String
