@@ -25,15 +25,45 @@ object EstudioRepository {
     }
 
     fun crearEvidencia(sesionId: Int, imagen: ByteArray): EvidenciaEstado = ds().connection.use { c ->
-        val id = c.prepareStatement(
-            "INSERT INTO evidencias (sesion_id, imagen, estado, fecha) VALUES (?, ?, 'PENDIENTE', NOW())",
-            Statement.RETURN_GENERATED_KEYS
-        ).use { ps ->
-            ps.setInt(1, sesionId)
-            ps.setBytes(2, imagen)
+        var tieneImagenBlob = false
+        var tieneRutaImagen = false
+        runCatching {
+            val meta = c.metaData
+            val rs = meta.getColumns(null, null, "evidencias", null)
+            while (rs.next()) {
+                val col = rs.getString("COLUMN_NAME").lowercase()
+                if (col == "imagen") tieneImagenBlob = true
+                if (col == "ruta_imagen") tieneRutaImagen = true
+            }
+            rs.close()
+        }
+
+        val sql = when {
+            tieneImagenBlob && tieneRutaImagen ->
+                "INSERT INTO evidencias (sesion_id, imagen, ruta_imagen, estado, fecha) VALUES (?, ?, ?, 'PENDIENTE', NOW())"
+            tieneImagenBlob ->
+                "INSERT INTO evidencias (sesion_id, imagen, estado, fecha) VALUES (?, ?, 'PENDIENTE', NOW())"
+            tieneRutaImagen ->
+                "INSERT INTO evidencias (sesion_id, ruta_imagen, estado, fecha) VALUES (?, ?, 'PENDIENTE', NOW())"
+            else ->
+                "INSERT INTO evidencias (sesion_id, estado, fecha) VALUES (?, 'PENDIENTE', NOW())"
+        }
+
+        val id = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS).use { ps ->
+            var idx = 1
+            ps.setInt(idx++, sesionId)
+            if (tieneImagenBlob && tieneRutaImagen) {
+                ps.setBytes(idx++, imagen)
+                ps.setString(idx++, "evidencia_$sesionId.jpg")
+            } else if (tieneImagenBlob) {
+                ps.setBytes(idx++, imagen)
+            } else if (tieneRutaImagen) {
+                ps.setString(idx++, "evidencia_$sesionId.jpg")
+            }
             ps.executeUpdate()
             ps.generatedKeys.use { rs -> rs.next(); rs.getInt(1) }
         }
+
         c.prepareStatement("UPDATE sesiones SET estado = 'PENDIENTE_VALIDACION' WHERE id = ?").use { ps ->
             ps.setInt(1, sesionId)
             ps.executeUpdate()
@@ -67,10 +97,20 @@ object EstudioRepository {
     }
 
     fun imagen(id: Int): ByteArray? = ds().connection.use { c ->
-        c.prepareStatement("SELECT imagen FROM evidencias WHERE id = ?").use { ps ->
-            ps.setInt(1, id)
-            ps.executeQuery().use { rs -> if (rs.next()) rs.getBytes(1) else null }
+        var tieneImagen = false
+        runCatching {
+            val meta = c.metaData
+            val rs = meta.getColumns(null, null, "evidencias", "imagen")
+            tieneImagen = rs.next()
+            rs.close()
         }
+
+        if (tieneImagen) {
+            c.prepareStatement("SELECT imagen FROM evidencias WHERE id = ?").use { ps ->
+                ps.setInt(1, id)
+                ps.executeQuery().use { rs -> if (rs.next()) rs.getBytes(1) else null }
+            }
+        } else null
     }
 
     /** Aprueba o rechaza una evidencia y actualiza el estado de su sesión. */

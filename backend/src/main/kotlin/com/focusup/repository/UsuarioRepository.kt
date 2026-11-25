@@ -41,6 +41,55 @@ object UsuarioRepository {
         }
     }
 
+    /**
+     * Migra automáticamente al arrancar cualquier contraseña que no empiece con "$2"
+     * convirtiéndola a un hash BCrypt seguro.
+     */
+    fun migrarContrasenasSinHash() {
+        val ds = DatabaseFactory.dataSource
+        if (ds == null) {
+            usuariosMap.forEach { (id, u) ->
+                if (!u.password.startsWith("$2")) {
+                    val nuevoHash = PasswordHasher.hashPassword(u.password)
+                    usuariosMap[id] = u.copy(password = nuevoHash)
+                }
+            }
+            return
+        }
+
+        runCatching {
+            ds.connection.use { c ->
+                c.prepareStatement("SELECT id, password FROM usuarios WHERE password NOT LIKE '$2%'").use { ps ->
+                    ps.executeQuery().use { rs ->
+                        val aMigrar = mutableListOf<Pair<Int, String>>()
+                        while (rs.next()) {
+                            val id = rs.getInt("id")
+                            val pass = rs.getString("password")
+                            if (!pass.startsWith("$2")) {
+                                aMigrar.add(id to pass)
+                            }
+                        }
+
+                        if (aMigrar.isNotEmpty()) {
+                            c.prepareStatement("UPDATE usuarios SET password = ? WHERE id = ?").use { updatePs ->
+                                for ((id, passPlanaOHash) in aMigrar) {
+                                    val nuevoHash = PasswordHasher.hashPassword(passPlanaOHash)
+                                    updatePs.setString(1, nuevoHash)
+                                    updatePs.setInt(2, id)
+                                    updatePs.addBatch()
+                                }
+                                updatePs.executeBatch()
+                            }
+                            println("🟢 [FocusUp Server] Migradas ${aMigrar.size} contraseñas a BCrypt en MySQL.")
+                        }
+                    }
+                }
+            }
+        }.onFailure {
+            println("Aviso al migrar contraseñas en MySQL: ${it.message}")
+        }
+    }
+
     fun buscarPorCorreoYPassword(correo: String, password: String): Usuario? {
         val ds = DatabaseFactory.dataSource
         if (ds == null) {
@@ -56,8 +105,7 @@ object UsuarioRepository {
 
         return ds.connection.use { c ->
             c.prepareStatement(
-                "SELECT id, nombre, correo, password, rol, activo FROM usuarios " +
-                        "WHERE LOWER(correo) = LOWER(?)"
+                "SELECT id, nombre, correo, password, rol, activo FROM usuarios WHERE LOWER(correo) = LOWER(?)"
             ).use { ps ->
                 ps.setString(1, correo)
                 ps.executeQuery().use { rs ->

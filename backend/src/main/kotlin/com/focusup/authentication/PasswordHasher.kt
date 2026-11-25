@@ -1,46 +1,48 @@
 package com.focusup.authentication
 
+import at.favre.lib.crypto.bcrypt.BCrypt
 import java.security.MessageDigest
-import java.security.SecureRandom
 import java.util.Base64
 
 object PasswordHasher {
-    private const val ALGORITHM = "SHA-256"
 
-    /** Genera un hash SHA-256 con salt de la contraseña. Formato resultante: "salt:hashHex" */
+    /** Genera un hash BCrypt seguro de la contraseña. El resultado comienza con "$2a$" o "$2b$" */
     fun hashPassword(password: String): String {
-        val random = SecureRandom()
-        val saltBytes = ByteArray(16)
-        random.nextBytes(saltBytes)
-        val salt = Base64.getEncoder().encodeToString(saltBytes)
-
-        val digest = MessageDigest.getInstance(ALGORITHM)
-        digest.update(saltBytes)
-        val hashedBytes = digest.digest(password.toByteArray(Charsets.UTF_8))
-        val hashHex = hashedBytes.joinToString("") { "%02x".format(it) }
-
-        return "$salt:$hashHex"
+        return BCrypt.withDefaults().hashToString(10, password.toCharArray())
     }
 
-    /** Verfica si la contraseña ingresada coincide con el hash o texto plano almacenado. */
+    /**
+     * Verifica si la contraseña ingresada en texto plano coincide con la contraseña almacenada.
+     * Soporta hashes BCrypt ($2...), SHA-256 legacy (salt:hash) y texto plano.
+     */
     fun verifyPassword(plainPassword: String, storedPassword: String): Boolean {
-        if (!storedPassword.contains(":")) {
-            // Comparación simple para retrocompatibilidad con contraseñas no desordenadas/planas
-            return plainPassword == storedPassword
+        if (storedPassword.isBlank()) return false
+
+        // 1. Si la contraseña almacenada empieza con $2, es un hash BCrypt
+        if (storedPassword.startsWith("$2")) {
+            return runCatching {
+                BCrypt.verifyer().verify(plainPassword.toCharArray(), storedPassword).verified
+            }.getOrDefault(false)
         }
 
-        val parts = storedPassword.split(":")
-        if (parts.size != 2) return plainPassword == storedPassword
+        // 2. Si contiene un delimitador ':', intentar verificación con formato SHA-256 legacy
+        if (storedPassword.contains(":")) {
+            val parts = storedPassword.split(":")
+            if (parts.size == 2) {
+                runCatching {
+                    val salt = parts[0]
+                    val expectedHash = parts[1]
+                    val saltBytes = Base64.getDecoder().decode(salt)
+                    val digest = MessageDigest.getInstance("SHA-256")
+                    digest.update(saltBytes)
+                    val hashedBytes = digest.digest(plainPassword.toByteArray(Charsets.UTF_8))
+                    val actualHash = hashedBytes.joinToString("") { "%02x".format(it) }
+                    if (actualHash.equals(expectedHash, ignoreCase = true)) return true
+                }
+            }
+        }
 
-        val salt = parts[0]
-        val expectedHash = parts[1]
-
-        val saltBytes = Base64.getDecoder().decode(salt)
-        val digest = MessageDigest.getInstance(ALGORITHM)
-        digest.update(saltBytes)
-        val hashedBytes = digest.digest(plainPassword.toByteArray(Charsets.UTF_8))
-        val actualHash = hashedBytes.joinToString("") { "%02x".format(it) }
-
-        return actualHash.equals(expectedHash, ignoreCase = true)
+        // 3. Fallback: Comparación directa en texto plano (retrocompatibilidad)
+        return plainPassword == storedPassword
     }
 }
