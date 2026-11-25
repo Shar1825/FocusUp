@@ -60,8 +60,26 @@ data class TeacherProfile(
     val rol: Rol = Rol.DOCENTE,
     val especialidad: String = "General",
     val gruposAsignadosCount: Int = 0,
-    val totalEstudiantesCount: Int = 0
-)
+    val totalEstudiantesCount: Int = 0,
+    val entregasPendientesCalificar: Int = 0,
+    val evidenciasPendientes: Int = 0,
+    val gruposCount: Int = 0,
+    val estudiantesCount: Int = 0,
+    val porCalificarCount: Int = 0,
+    val evidenciasPendientesCount: Int = 0
+) {
+    val cantidadGrupos: Int
+        get() = if (gruposAsignadosCount > 0) gruposAsignadosCount else gruposCount
+
+    val cantidadEstudiantes: Int
+        get() = if (totalEstudiantesCount > 0) totalEstudiantesCount else estudiantesCount
+
+    val cantidadEntregasPendientes: Int
+        get() = if (entregasPendientesCalificar > 0) entregasPendientesCalificar else porCalificarCount
+
+    val cantidadEvidenciasPendientes: Int
+        get() = if (evidenciasPendientes > 0) evidenciasPendientes else evidenciasPendientesCount
+}
 
 /** Grupos y Docentes */
 @Serializable
@@ -140,8 +158,18 @@ data class AcademicProgress(
     val actividadesCompletadas: Int = 0,
     val actividadesPendientes: Int = 0,
     val promedioCalificaciones: Double = 0.0,
-    val porcentajeAsistencia: Double = 100.0
-)
+    val porcentajeAsistencia: Double = 100.0,
+    val minutosEstudioHoy: Int = 0,
+    val minutosEstudioDia: Int = 0,
+    val rachaDias: Int = 0,
+    val rachaDiasValidados: Int = 0
+) {
+    val minutosEstudioCalculados: Int
+        get() = if (minutosEstudioHoy > 0) minutosEstudioHoy else minutosEstudioDia
+
+    val rachaDiasCalculada: Int
+        get() = if (rachaDias > 0) rachaDias else rachaDiasValidados
+}
 
 /** Administración */
 @Serializable
@@ -188,8 +216,37 @@ data class AdminStatistics(
     val docentesCount: Int = 0,
     val administradoresCount: Int = 0,
     val gruposTotales: Int = 0,
-    val actividadesTotales: Int = 0
-)
+    val actividadesTotales: Int = 0,
+    val usuariosActivos: Int = 0,
+    val sesionesEstudio: Int = 0,
+    val sesionesEstudioCount: Int = 0,
+    val totalSesiones: Int = 0,
+    val evidenciasPendientes: Int = 0,
+    val evidenciasPendientesCount: Int = 0,
+    val evidenciasAprobadas: Int = 0,
+    val evidenciasAprobadasCount: Int = 0,
+    val evidenciasRechazadas: Int = 0,
+    val evidenciasRechazadasCount: Int = 0
+) {
+    val totalUsuariosActivos: Int
+        get() = if (totalUsuarios > 0) totalUsuarios else usuariosActivos
+
+    val totalSesionesEstudio: Int
+        get() = when {
+            sesionesEstudio > 0 -> sesionesEstudio
+            sesionesEstudioCount > 0 -> sesionesEstudioCount
+            else -> totalSesiones
+        }
+
+    val totalEvidenciasPendientes: Int
+        get() = if (evidenciasPendientes > 0) evidenciasPendientes else evidenciasPendientesCount
+
+    val totalEvidenciasAprobadas: Int
+        get() = if (evidenciasAprobadas > 0) evidenciasAprobadas else evidenciasAprobadasCount
+
+    val totalEvidenciasRechazadas: Int
+        get() = if (evidenciasRechazadas > 0) evidenciasRechazadas else evidenciasRechazadasCount
+}
 
 /** Sesiones de Estudio y Evidencias */
 @Serializable

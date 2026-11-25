@@ -2,6 +2,12 @@ package com.example.focusup.ui.main
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -83,68 +89,6 @@ data class TareaUI(
     val completada: Boolean = false
 )
 
-/** Actividad del día para la UI */
-data class ActividadDiaUI(
-    val id: Int,
-    val hora: String,
-    val titulo: String,
-    val tipo: String,
-    val estado: String
-)
-
-/** Contenido adaptativo según rol */
-private data class PanelRolInfo(
-    val titulo: String,
-    val descripcion: String,
-    val acciones: List<String>,
-    val metricasClave: List<Pair<String, String>>
-)
-
-private fun panelPara(rol: Rol): PanelRolInfo = when (rol) {
-    Rol.ADMINISTRADOR -> PanelRolInfo(
-        titulo = "Centro de Control General (Admin)",
-        descripcion = "Supervisión total de usuarios, sistema y plataforma Ktor.",
-        acciones = listOf(
-            "Gestión centralizada de usuarios y asignación de roles.",
-            "Monitoreo de estado de servicios Ktor y logs en tiempo real.",
-            "Configuración de parámetros globales de la aplicación."
-        ),
-        metricasClave = listOf(
-            "Usuarios Activos" to "142",
-            "Servicios Ktor" to "Online (99.9%)",
-            "Logs de Sistema" to "0 Errores"
-        )
-    )
-    Rol.DOCENTE -> PanelRolInfo(
-        titulo = "Panel de Gestión Académica (Docente)",
-        descripcion = "Control de asignaturas, grupos y actividades de estudiantes.",
-        acciones = listOf(
-            "Creación y publicación de nuevas tareas y actividades.",
-            "Revisión y calificación de evidencias enviadas.",
-            "Seguimiento del rendimiento y promedio por grupo."
-        ),
-        metricasClave = listOf(
-            "Grupos Asignados" to "4 Grupos",
-            "Estudiantes" to "98 Totales",
-            "Por Calificar" to "5 Evidencias"
-        )
-    )
-    Rol.ESTUDIANTE -> PanelRolInfo(
-        titulo = "Panel de Rendimiento Estudiantil",
-        descripcion = "Planifica tu tiempo, cumple tus entregas y mejora tus hábitos.",
-        acciones = listOf(
-            "Registro de sesiones de estudio concentrado (Pomodoro).",
-            "Entrega y actualización de tareas pendientes.",
-            "Monitoreo de tu racha diaria y progreso académico."
-        ),
-        metricasClave = listOf(
-            "Asignaturas" to "5 Materias",
-            "Promedio General" to "9.4 / 10",
-            "Entregas a Tiempo" to "96%"
-        )
-    )
-}
-
 private fun Rol.etiqueta(): String = when (this) {
     Rol.ADMINISTRADOR -> "Administrador"
     Rol.DOCENTE -> "Docente"
@@ -158,29 +102,14 @@ fun MainScreen(
 ) {
     var tabActual by remember { mutableStateOf(MainTab.INICIO) }
     var mostrarDialogoNuevaTarea by remember { mutableStateOf(false) }
-    var mostrarDialogoSesionEstudio by remember { mutableStateOf(false) }
     var mensajeSnack by remember { mutableStateOf<String?>(null) }
 
     val studyViewModel = remember { StudyViewModel() }
+    val dashboardViewModel = remember { DashboardViewModel() }
+    val dashboardState by dashboardViewModel.uiState.collectAsState()
 
-    var listaTareas by remember {
-        mutableStateOf(
-            listOf(
-                TareaUI(1, "Proyecto Final KMP", "Programación Móvil", "Hoy, 23:59", "Alta"),
-                TareaUI(2, "Resolución de Ejercicios Ch. 4", "Matemáticas", "Mañana, 18:00", "Media"),
-                TareaUI(3, "Lectura de Arquitectura MVVM", "Ingeniería de Software", "15 Oct", "Baja"),
-                TareaUI(4, "Preparar Presentación de Tesis", "Seminario", "18 Oct", "Alta")
-            )
-        )
-    }
-
-    val listaActividades = remember {
-        listOf(
-            ActividadDiaUI(1, "08:00 - 09:30", "Clase de Programación Kotlin", "Clase", "Completado"),
-            ActividadDiaUI(2, "10:00 - 11:30", "Sesión Enfoque: Proyecto FocusUp", "Estudio", "En progreso"),
-            ActividadDiaUI(3, "14:00 - 15:30", "Entrega de Avance de Red", "Entrega", "Próximo"),
-            ActividadDiaUI(4, "16:00 - 17:30", "Repaso General de Algoritmos", "Estudio", "Próximo")
-        )
+    LaunchedEffect(usuario.rol) {
+        dashboardViewModel.cargarDatos(usuario.rol)
     }
 
     Box(
@@ -213,13 +142,8 @@ fun MainScreen(
                     when (tab) {
                         MainTab.INICIO -> DashboardTabContent(
                             usuario = usuario,
-                            tareas = listaTareas,
-                            actividades = listaActividades,
-                            onToggleTarea = { id ->
-                                listaTareas = listaTareas.map {
-                                    if (it.id == id) it.copy(completada = !it.completada) else it
-                                }
-                            },
+                            state = dashboardState,
+                            onReintentar = { dashboardViewModel.cargarDatos(usuario.rol) },
                             onIniciarEstudio = { tabActual = MainTab.ESTUDIO },
                             onNuevaTarea = {
                                 if (usuario.rol == Rol.DOCENTE) {
@@ -242,6 +166,8 @@ fun MainScreen(
 
                         MainTab.PERFIL -> ModuloPerfilContent(
                             usuario = usuario,
+                            state = dashboardState,
+                            onReintentar = { dashboardViewModel.cargarDatos(usuario.rol) },
                             onCerrarSesion = onCerrarSesion
                         )
                     }
@@ -281,35 +207,6 @@ fun MainScreen(
                     }
                 }
             }
-        }
-
-        if (mostrarDialogoNuevaTarea) {
-            DialogoNuevaTarea(
-                onDesestimar = { mostrarDialogoNuevaTarea = false },
-                onGuardar = { titulo, materia, prioridad ->
-                    val nueva = TareaUI(
-                        id = (listaTareas.maxOfOrNull { it.id } ?: 0) + 1,
-                        titulo = titulo,
-                        materia = materia,
-                        fechaEntrega = "Próximamente",
-                        prioridad = prioridad
-                    )
-                    listaTareas = listOf(nueva) + listaTareas
-                    mostrarDialogoNuevaTarea = false
-                    mensajeSnack = "Tarea \"$titulo\" creada con éxito."
-                }
-            )
-        }
-
-        if (mostrarDialogoSesionEstudio) {
-            DialogoIniciarEstudio(
-                onDesestimar = { mostrarDialogoSesionEstudio = false },
-                onComenzar = { min, materia ->
-                    mostrarDialogoSesionEstudio = false
-                    tabActual = MainTab.ESTUDIO
-                    mensajeSnack = "Sesión de $min min activada para $materia."
-                }
-            )
         }
     }
 }
@@ -405,17 +302,169 @@ private fun HeaderFuturista(usuario: LoginResponse) {
 }
 
 @Composable
+private fun SkeletonBox(
+    modifier: Modifier = Modifier,
+    shape: RoundedCornerShape = RoundedCornerShape(12.dp)
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "skeleton_anim")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "skeleton_alpha"
+    )
+
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(FocusUpColors.TarjetaElevada.copy(alpha = alpha))
+    )
+}
+
+@Composable
+private fun DashboardSkeleton() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        SkeletonBox(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp),
+            shape = RoundedCornerShape(20.dp)
+        )
+
+        SkeletonBox(
+            modifier = Modifier
+                .width(220.dp)
+                .height(26.dp),
+            shape = RoundedCornerShape(8.dp)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            SkeletonBox(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(110.dp),
+                shape = RoundedCornerShape(18.dp)
+            )
+            SkeletonBox(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(110.dp),
+                shape = RoundedCornerShape(18.dp)
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            SkeletonBox(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(110.dp),
+                shape = RoundedCornerShape(18.dp)
+            )
+            SkeletonBox(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(110.dp),
+                shape = RoundedCornerShape(18.dp)
+            )
+        }
+
+        SkeletonBox(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(70.dp),
+            shape = RoundedCornerShape(18.dp)
+        )
+    }
+}
+
+@Composable
+private fun DashboardErrorView(
+    error: String,
+    onReintentar: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 20.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = FocusUpColors.TarjetaElevada),
+        border = BorderStroke(1.dp, FocusUpColors.Error.copy(alpha = 0.5f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(text = "⚠️", fontSize = 44.sp)
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Error de Conexión",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = FocusUpColors.Texto
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = error,
+                style = MaterialTheme.typography.bodyMedium,
+                color = FocusUpColors.TextoSecundario,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+            Button(
+                onClick = onReintentar,
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = FocusUpColors.AzulElectrico,
+                    contentColor = FocusUpColors.Fondo
+                )
+            ) {
+                Text(
+                    text = "🔄 Reintentar",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun DashboardTabContent(
     usuario: LoginResponse,
-    tareas: List<TareaUI>,
-    actividades: List<ActividadDiaUI>,
-    onToggleTarea: (Int) -> Unit,
+    state: DashboardUiState,
+    onReintentar: () -> Unit,
     onIniciarEstudio: () -> Unit,
     onNuevaTarea: () -> Unit,
     onVerEstadisticas: () -> Unit,
     onSubirEvidencia: () -> Unit,
     onGestionUsuarios: () -> Unit
 ) {
+    if (state.cargando) {
+        DashboardSkeleton()
+        return
+    }
+
+    if (state.error != null) {
+        DashboardErrorView(error = state.error, onReintentar = onReintentar)
+        return
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -456,18 +505,6 @@ private fun DashboardTabContent(
                         fontWeight = FontWeight.Medium
                     )
                 }
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = FocusUpColors.AzulElectrico.copy(alpha = 0.15f)
-                ) {
-                    Text(
-                        text = "87% Meta",
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = FocusUpColors.AzulElectrico,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
             }
         }
 
@@ -483,7 +520,7 @@ private fun DashboardTabContent(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        GridProductividad()
+        GridProductividadReal(usuario = usuario, state = state)
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -598,44 +635,50 @@ private fun DashboardTabContent(
             }
         }
 
-        if (usuario.rol == Rol.ESTUDIANTE) {
+        if (usuario.rol == Rol.ESTUDIANTE && state.actividadesEstudiante.isNotEmpty()) {
             Spacer(modifier = Modifier.height(24.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Tareas Pendientes (${tareas.count { !it.completada }})",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = FocusUpColors.Texto
-                )
-            }
+            Text(
+                text = "Actividades Académicas (${state.actividadesEstudiante.size})",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = FocusUpColors.Texto
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            tareas.take(3).forEach { tarea ->
-                ItemTareaFuturista(tarea = tarea, onToggle = { onToggleTarea(tarea.id) })
-                Spacer(modifier = Modifier.height(8.dp))
+            state.actividadesEstudiante.take(4).forEach { act ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = FocusUpColors.Tarjeta),
+                    border = BordeTarjeta
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("📋 ", fontSize = 20.sp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = act.titulo,
+                                fontWeight = FontWeight.Bold,
+                                color = FocusUpColors.Texto,
+                                fontSize = 15.sp
+                            )
+                            Text(
+                                text = if (act.fechaEntrega.isNotBlank()) "Entrega: ${act.fechaEntrega}" else "Sin fecha asignada",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = FocusUpColors.TextoSecundario
+                            )
+                        }
+                    }
+                }
             }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = "Actividades del Día",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = FocusUpColors.Texto
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        actividades.forEach { actividad ->
-            ItemActividadDia(actividad = actividad)
-            Spacer(modifier = Modifier.height(8.dp))
         }
 
         Spacer(modifier = Modifier.height(30.dp))
@@ -643,52 +686,177 @@ private fun DashboardTabContent(
 }
 
 @Composable
-private fun GridProductividad() {
+private fun GridProductividadReal(
+    usuario: LoginResponse,
+    state: DashboardUiState
+) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            MetricaCard(
-                titulo = "Tiempo Hoy",
-                valor = "3.5 hrs",
-                subtitulo = "Meta: 4.0 hrs (87%)",
-                icono = "⏱️",
-                color = FocusUpColors.AzulElectrico,
-                modifier = Modifier.weight(1f)
-            )
+        when (usuario.rol) {
+            Rol.ESTUDIANTE -> {
+                val prog = state.studentProgress
+                val minHoy = prog?.minutosEstudioCalculados ?: 0
+                val promedio = prog?.promedioCalificaciones ?: 0.0
+                val racha = prog?.rachaDiasCalculada ?: 0
+                val pend = prog?.actividadesPendientes ?: 0
+                val comp = prog?.actividadesCompletadas ?: 0
 
-            MetricaCard(
-                titulo = "Score Enfoque",
-                valor = "94%",
-                subtitulo = "Nivel Excelente",
-                icono = "🎯",
-                color = FocusUpColors.VerdeExito,
-                modifier = Modifier.weight(1f)
-            )
-        }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MetricaCard(
+                        titulo = "Minutos Estudio",
+                        valor = "$minHoy min",
+                        subtitulo = "Sesiones del día",
+                        icono = "⏱️",
+                        color = FocusUpColors.AzulElectrico,
+                        modifier = Modifier.weight(1f)
+                    )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            MetricaCard(
-                titulo = "Racha Actual",
-                valor = "7 Días",
-                subtitulo = "¡En fuego! 🔥",
-                icono = "⚡",
-                color = FocusUpColors.Ambar,
-                modifier = Modifier.weight(1f)
-            )
+                    MetricaCard(
+                        titulo = "Promedio General",
+                        valor = "$promedio",
+                        subtitulo = "Calificaciones",
+                        icono = "🎯",
+                        color = FocusUpColors.VerdeExito,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
 
-            MetricaCard(
-                titulo = "Completadas",
-                valor = "5 / 7",
-                subtitulo = "Tareas del día",
-                icono = "✅",
-                color = FocusUpColors.PurpuraNeon,
-                modifier = Modifier.weight(1f)
-            )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MetricaCard(
+                        titulo = "Racha Validad",
+                        valor = "$racha Días",
+                        subtitulo = "Días seguidos",
+                        icono = "⚡",
+                        color = FocusUpColors.Ambar,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    MetricaCard(
+                        titulo = "Tareas Pendientes",
+                        valor = "$pend",
+                        subtitulo = "$comp completadas",
+                        icono = "✅",
+                        color = FocusUpColors.PurpuraNeon,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Rol.DOCENTE -> {
+                val prof = state.teacherProfile
+                val grupos = prof?.cantidadGrupos ?: 0
+                val estudiantes = prof?.cantidadEstudiantes ?: 0
+                val porCalificar = prof?.cantidadEntregasPendientes ?: 0
+                val evidencias = prof?.cantidadEvidenciasPendientes ?: 0
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MetricaCard(
+                        titulo = "Grupos Asignados",
+                        valor = "$grupos",
+                        subtitulo = "Grupos a cargo",
+                        icono = "🏫",
+                        color = FocusUpColors.AzulElectrico,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    MetricaCard(
+                        titulo = "Total Estudiantes",
+                        valor = "$estudiantes",
+                        subtitulo = "Estudiantes",
+                        icono = "👥",
+                        color = FocusUpColors.VerdeExito,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MetricaCard(
+                        titulo = "Por Calificar",
+                        valor = "$porCalificar",
+                        subtitulo = "Entregas pendientes",
+                        icono = "📝",
+                        color = FocusUpColors.Ambar,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    MetricaCard(
+                        titulo = "Evidencias Pendientes",
+                        valor = "$evidencias",
+                        subtitulo = "Por validar",
+                        icono = "📷",
+                        color = FocusUpColors.PurpuraNeon,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Rol.ADMINISTRADOR -> {
+                val stats = state.adminStatistics
+                val totalActivos = stats?.totalUsuariosActivos ?: 0
+                val estCount = stats?.estudiantesCount ?: 0
+                val docCount = stats?.docentesCount ?: 0
+                val sesiones = stats?.totalSesionesEstudio ?: 0
+                val evPend = stats?.totalEvidenciasPendientes ?: 0
+                val evAprob = stats?.totalEvidenciasAprobadas ?: 0
+                val evRech = stats?.totalEvidenciasRechazadas ?: 0
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MetricaCard(
+                        titulo = "Usuarios Activos",
+                        valor = "$totalActivos",
+                        subtitulo = "$estCount Est | $docCount Doc",
+                        icono = "👥",
+                        color = FocusUpColors.AzulElectrico,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    MetricaCard(
+                        titulo = "Sesiones Estudio",
+                        valor = "$sesiones",
+                        subtitulo = "Total sesiones",
+                        icono = "⏱️",
+                        color = FocusUpColors.VerdeExito,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MetricaCard(
+                        titulo = "Evidencias Pendientes",
+                        valor = "$evPend",
+                        subtitulo = "Pendientes",
+                        icono = "⏳",
+                        color = FocusUpColors.Ambar,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    MetricaCard(
+                        titulo = "Evidencias Validadas",
+                        valor = "$evAprob",
+                        subtitulo = "$evRech rechazadas",
+                        icono = "✅",
+                        color = FocusUpColors.PurpuraNeon,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
         }
     }
 }
@@ -792,135 +960,51 @@ private fun AccesoRapidoCard(
 }
 
 @Composable
-private fun ItemTareaFuturista(
-    tarea: TareaUI,
-    onToggle: () -> Unit
-) {
-    val colorPrioridad = when (tarea.prioridad) {
-        "Alta" -> FocusUpColors.Error
-        "Media" -> FocusUpColors.Ambar
-        else -> FocusUpColors.AzulElectrico
-    }
-
-    Card(
+private fun PantallaProvisionalUsuarios() {
+    Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onToggle() },
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (tarea.completada) FocusUpColors.Tarjeta.copy(alpha = 0.5f) else FocusUpColors.Tarjeta
-        ),
-        border = BorderStroke(1.dp, if (tarea.completada) FocusUpColors.Borde else colorPrioridad.copy(alpha = 0.3f))
+            .fillMaxSize()
+            .padding(20.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = FocusUpColors.TarjetaElevada),
+            border = BordeTarjetaNeon
         ) {
-            Checkbox(
-                checked = tarea.completada,
-                onCheckedChange = { onToggle() },
-                colors = CheckboxDefaults.colors(
-                    checkedColor = FocusUpColors.AzulElectrico,
-                    uncheckedColor = FocusUpColors.BordeCampo
-                )
-            )
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = tarea.titulo,
-                    fontWeight = FontWeight.Bold,
-                    color = if (tarea.completada) FocusUpColors.TextoSecundario else FocusUpColors.Texto,
-                    fontSize = 15.sp
-                )
-
-                Spacer(modifier = Modifier.height(2.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = tarea.materia,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = FocusUpColors.TextoSecundario
-                    )
-                    Text(text = " • ", color = FocusUpColors.TextoSecundario)
-                    Text(
-                        text = tarea.fechaEntrega,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = FocusUpColors.TextoSecundario
-                    )
-                }
-            }
-
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = colorPrioridad.copy(alpha = 0.15f),
-                border = BorderStroke(1.dp, colorPrioridad.copy(alpha = 0.4f))
-            ) {
-                Text(
-                    text = tarea.prioridad,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colorPrioridad,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ItemActividadDia(actividad: ActividadDiaUI) {
-    val (colorEstado, labelEstado) = when (actividad.estado) {
-        "Completado" -> FocusUpColors.VerdeExito to "✓ Hecho"
-        "En progreso" -> FocusUpColors.AzulElectrico to "⚡ En Curso"
-        else -> FocusUpColors.TextoSecundario to "⏳ Próximo"
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = FocusUpColors.Tarjeta),
-        border = BordeTarjeta
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
+            Column(
                 modifier = Modifier
-                    .width(4.dp)
-                    .height(36.dp)
-                    .clip(CircleShape)
-                    .background(colorEstado)
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
+                    .fillMaxWidth()
+                    .padding(30.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(text = "👥", fontSize = 48.sp)
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = actividad.titulo,
-                    fontWeight = FontWeight.SemiBold,
+                    text = "Gestión de Usuarios",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
                     color = FocusUpColors.Texto,
-                    fontSize = 14.sp
+                    textAlign = TextAlign.Center
                 )
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "${actividad.hora} • ${actividad.tipo}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = FocusUpColors.TextoSecundario
+                    text = "Próximamente",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = FocusUpColors.AzulElectrico,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Módulo en desarrollo para la administración centralizada de cuentas de estudiantes y docentes.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = FocusUpColors.TextoSecundario,
+                    textAlign = TextAlign.Center
                 )
             }
-
-            Text(
-                text = labelEstado,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = colorEstado
-            )
         }
     }
 }
@@ -928,35 +1012,18 @@ private fun ItemActividadDia(actividad: ActividadDiaUI) {
 @Composable
 private fun ModuloPerfilContent(
     usuario: LoginResponse,
+    state: DashboardUiState,
+    onReintentar: () -> Unit,
     onCerrarSesion: () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
-    var adminStats by remember { mutableStateOf<AdminStatistics?>(null) }
-    var cargandoStats by remember { mutableStateOf(false) }
-    var errorStats by remember { mutableStateOf<String?>(null) }
-
-    val adminService = remember { AdminService() }
-
-    fun cargarEstadisticasAdmin() {
-        if (usuario.rol == Rol.ADMINISTRADOR) {
-            cargandoStats = true
-            errorStats = null
-            scope.launch {
-                adminService.getStatistics()
-                    .onSuccess {
-                        adminStats = it
-                        cargandoStats = false
-                    }
-                    .onFailure { ex ->
-                        errorStats = "No se pudieron consultar estadísticas: ${ex.message}"
-                        cargandoStats = false
-                    }
-            }
-        }
+    if (state.cargando) {
+        DashboardSkeleton()
+        return
     }
 
-    LaunchedEffect(usuario.rol) {
-        cargarEstadisticasAdmin()
+    if (state.error != null) {
+        DashboardErrorView(error = state.error, onReintentar = onReintentar)
+        return
     }
 
     Column(
@@ -1021,47 +1088,62 @@ private fun ModuloPerfilContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        if (usuario.rol == Rol.ADMINISTRADOR) {
-            if (cargandoStats) {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(20.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = FocusUpColors.AzulElectrico)
+        val metricas: List<Pair<String, String>> = remember(usuario.rol, state) {
+            when (usuario.rol) {
+                Rol.ESTUDIANTE -> {
+                    val prog = state.studentProgress
+                    listOf(
+                        "Tareas Pendientes" to "${prog?.actividadesPendientes ?: 0}",
+                        "Tareas Entregadas" to "${prog?.actividadesCompletadas ?: 0}",
+                        "Promedio General" to "${prog?.promedioCalificaciones ?: 0.0}",
+                        "Minutos de Estudio Hoy" to "${prog?.minutosEstudioCalculados ?: 0} min",
+                        "Racha de Días Validados" to "${prog?.rachaDiasCalculada ?: 0} días"
+                    )
                 }
-            } else if (errorStats != null) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = FocusUpColors.Tarjeta),
-                    border = BorderStroke(1.dp, FocusUpColors.Error)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text("⚠️ Error de estadísticas", color = FocusUpColors.ErrorTexto, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = errorStats ?: "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = FocusUpColors.TextoSecundario,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
-                            onClick = { cargarEstadisticasAdmin() },
-                            colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.AzulElectrico)
-                        ) {
-                            Text("🔄 Reintentar", color = FocusUpColors.Fondo, fontWeight = FontWeight.Bold)
-                        }
-                    }
+                Rol.DOCENTE -> {
+                    val prof = state.teacherProfile
+                    listOf(
+                        "Grupos Asignados" to "${prof?.cantidadGrupos ?: 0}",
+                        "Total Estudiantes" to "${prof?.cantidadEstudiantes ?: 0}",
+                        "Entregas por Calificar" to "${prof?.cantidadEntregasPendientes ?: 0}",
+                        "Evidencias Pendientes" to "${prof?.cantidadEvidenciasPendientes ?: 0}"
+                    )
                 }
-            } else {
-                AdminStatsCard(stats = adminStats ?: AdminStatistics())
+                Rol.ADMINISTRADOR -> {
+                    val stats = state.adminStatistics
+                    listOf(
+                        "Total Usuarios Activos" to "${stats?.totalUsuariosActivos ?: 0}",
+                        "Estudiantes Activos" to "${stats?.estudiantesCount ?: 0}",
+                        "Docentes Activos" to "${stats?.docentesCount ?: 0}",
+                        "Administradores Activos" to "${stats?.administradoresCount ?: 0}",
+                        "Sesiones de Estudio" to "${stats?.totalSesionesEstudio ?: 0}",
+                        "Evidencias Pendientes" to "${stats?.totalEvidenciasPendientes ?: 0}",
+                        "Evidencias Aprobadas" to "${stats?.totalEvidenciasAprobadas ?: 0}",
+                        "Evidencias Rechazadas" to "${stats?.totalEvidenciasRechazadas ?: 0}"
+                    )
+                }
             }
-        } else {
-            val panelInfo = remember(usuario.rol) { panelPara(usuario.rol) }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = FocusUpColors.TarjetaElevada),
+            border = BordeTarjetaNeon
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(
+                    text = "Métricas Reales del Perfil",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = FocusUpColors.Texto
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Datos en tiempo real obtenidos desde la API Ktor.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = FocusUpColors.TextoSecundario
+                )
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1083,18 +1165,15 @@ private fun ModuloPerfilContent(
                         color = FocusUpColors.TextoSecundario
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    panelInfo.metricasClave.forEach { (label, valStr) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = label, color = FocusUpColors.TextoSecundario, fontSize = 13.sp)
-                            Text(text = valStr, color = FocusUpColors.AzulElectrico, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        }
+                metricas.forEach { (label, valStr) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = label, color = FocusUpColors.TextoSecundario, fontSize = 13.sp)
+                        Text(text = valStr, color = FocusUpColors.AzulElectrico, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                 }
             }
@@ -1160,91 +1239,4 @@ private fun NavegacionInferiorFuturista(
             }
         }
     }
-}
-
-@Composable
-private fun DialogoNuevaTarea(
-    onDesestimar: () -> Unit,
-    onGuardar: (titulo: String, materia: String, prioridad: String) -> Unit
-) {
-    var titulo by remember { mutableStateOf("") }
-    var materia by remember { mutableStateOf("") }
-    var prioridad by remember { mutableStateOf("Media") }
-
-    AlertDialog(
-        onDismissRequest = onDesestimar,
-        containerColor = FocusUpColors.TarjetaElevada,
-        title = { Text("Nueva Tarea", color = FocusUpColors.Texto, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = titulo,
-                    onValueChange = { titulo = it },
-                    label = { Text("Título de la tarea") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = materia,
-                    onValueChange = { materia = it },
-                    label = { Text("Materia / Asignatura") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { if (titulo.isNotBlank()) onGuardar(titulo, materia, prioridad) },
-                colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.AzulElectrico)
-            ) {
-                Text("Guardar", color = FocusUpColors.Fondo, fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDesestimar) {
-                Text("Cancelar", color = FocusUpColors.TextoSecundario)
-            }
-        }
-    )
-}
-
-@Composable
-private fun DialogoIniciarEstudio(
-    onDesestimar: () -> Unit,
-    onComenzar: (minutos: Int, materia: String) -> Unit
-) {
-    var minutos by remember { mutableStateOf(25) }
-    var materia by remember { mutableStateOf("Programación Kotlin") }
-
-    AlertDialog(
-        onDismissRequest = onDesestimar,
-        containerColor = FocusUpColors.TarjetaElevada,
-        title = { Text("Iniciar Enfoque Pomodoro", color = FocusUpColors.Texto, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Selecciona la duración deseada para tu sesión:", style = MaterialTheme.typography.bodyMedium, color = FocusUpColors.TextoSecundario)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(15, 25, 45, 60).forEach { m ->
-                        FilterChip(
-                            selected = minutos == m,
-                            onClick = { minutos = m },
-                            label = { Text("${m}m") }
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onComenzar(minutos, materia) },
-                colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.AzulElectrico)
-            ) {
-                Text("Iniciar Pomodoro", color = FocusUpColors.Fondo, fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDesestimar) {
-                Text("Cancelar", color = FocusUpColors.TextoSecundario)
-            }
-        }
-    )
 }

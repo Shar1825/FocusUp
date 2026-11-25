@@ -32,6 +32,13 @@ data class AdminStatisticsResponse(
     val cantidadEstudiantes: Int,
     val usuariosActivos: Int,
     val usuariosInactivos: Int,
+    val usuariosActivosAdmin: Int = 0,
+    val usuariosActivosDocente: Int = 0,
+    val usuariosActivosEstudiante: Int = 0,
     val totalGrupos: Int,
-    val totalActividades: Int
+    val totalActividades: Int,
+    val totalSesiones: Int = 0,
+    val evidenciasPendientes: Int = 0,
+    val evidenciasAprobadas: Int = 0,
+    val evidenciasRechazadas: Int = 0
 )

@@ -4,6 +4,7 @@ import com.focusup.dto.*
 import com.focusup.model.Rol
 import com.focusup.model.UserDto
 import com.focusup.repository.ActividadRepository
+import com.focusup.repository.EstudioRepository
 import com.focusup.repository.GrupoRepository
 import com.focusup.repository.UsuarioRepository
 
@@ -44,8 +45,17 @@ object AdminService {
         val activos = usuarios.count { it.activo }
         val inactivos = totalUsuarios - activos
 
+        val activosAdmin = usuarios.count { it.rol.esAdmin() && it.activo }
+        val activosDocentes = usuarios.count { it.rol == Rol.DOCENTE && it.activo }
+        val activosEstudiantes = usuarios.count { it.rol == Rol.ESTUDIANTE && it.activo }
+
         val totalGrupos = GrupoRepository.contarTotal()
         val totalActividades = ActividadRepository.contarTotal()
+
+        val totalSesiones = EstudioRepository.contarTotalSesiones()
+        val evPendientes = EstudioRepository.contarEvidenciasPorEstado("PENDIENTE")
+        val evAprobadas = EstudioRepository.contarEvidenciasPorEstado("APROBADA")
+        val evRechazadas = EstudioRepository.contarEvidenciasPorEstado("RECHAZADA")
 
         return AdminStatisticsResponse(
             totalUsuarios = totalUsuarios,
@@ -54,8 +64,15 @@ object AdminService {
             cantidadEstudiantes = estudiantes,
             usuariosActivos = activos,
             usuariosInactivos = inactivos,
+            usuariosActivosAdmin = activosAdmin,
+            usuariosActivosDocente = activosDocentes,
+            usuariosActivosEstudiante = activosEstudiantes,
             totalGrupos = totalGrupos,
-            totalActividades = totalActividades
+            totalActividades = totalActividades,
+            totalSesiones = totalSesiones,
+            evidenciasPendientes = evPendientes,
+            evidenciasAprobadas = evAprobadas,
+            evidenciasRechazadas = evRechazadas
         )
     }
 }

@@ -162,14 +162,27 @@ object CalificacionRepository {
         val pendientes = (totalActividades - completadas).coerceAtLeast(0)
         val promedio = if (completadas > 0) calificaciones.map { it.calificacion }.average() else 0.0
 
+        val minutosHoy = EstudioRepository.obtenerMinutosEstudioHoy(estudianteId)
+        val racha = EstudioRepository.obtenerRachaDiasValidados(estudianteId)
+
         return AcademicProgress(
             estudianteId = estudianteId,
             estudianteNombre = estudiante?.nombre ?: "Estudiante #$estudianteId",
             actividadesTotales = totalActividades,
             actividadesCompletadas = completadas,
+            actividadesEntregadas = null,
             actividadesPendientes = pendientes,
             promedioCalificaciones = (Math.round(promedio * 100.0) / 100.0),
-            porcentajeAsistencia = 95.0
+            porcentajeAsistencia = null,
+            minutosEstudioHoy = minutosHoy,
+            rachaDias = racha
         )
+    }
+
+    /** Entregas de actividades pendientes de calificar por un docente.
+     * Retorna null ("no disponible") ya que el bloque de entregas aún no está integrado en la BD.
+     */
+    fun contarEntregasPendientesDocente(docenteId: Int): Int? {
+        return null
     }
 }
