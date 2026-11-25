@@ -177,6 +177,13 @@ data class UpdateUserStatusRequest(
 @Serializable
 data class AdminStatistics(
     val totalUsuarios: Int = 0,
+    val cantidadAdmin: Int = 0,
+    val cantidadDocentes: Int = 0,
+    val cantidadEstudiantes: Int = 0,
+    val usuariosActivos: Int = 0,
+    val usuariosInactivos: Int = 0,
+    val totalGrupos: Int = 0,
+    val totalActividades: Int = 0,
     val estudiantesCount: Int = 0,
     val docentesCount: Int = 0,
     val administradoresCount: Int = 0,

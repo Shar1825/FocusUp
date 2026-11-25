@@ -4,6 +4,7 @@ import com.example.focusup.model.AdminStatistics
 import com.example.focusup.model.ApiResponse
 import com.example.focusup.model.CreateUserRequest
 import com.example.focusup.model.Rol
+import com.example.focusup.model.UpdateUserRequest
 import com.example.focusup.model.UpdateUserStatusRequest
 import com.example.focusup.model.UserDto
 import io.ktor.client.call.*
@@ -31,6 +32,14 @@ class AdminService {
 
     suspend fun createUser(req: CreateUserRequest): Result<UserDto> = safeApiCall {
         ApiConfig.client.post("${ApiConfig.BASE_URL}/api/admin/users") {
+            contentType(ContentType.Application.Json)
+            setBody(req)
+            agregarToken()
+        }
+    }
+
+    suspend fun updateUser(id: Int, req: UpdateUserRequest): Result<UserDto> = safeApiCall {
+        ApiConfig.client.put("${ApiConfig.BASE_URL}/api/admin/users/$id") {
             contentType(ContentType.Application.Json)
             setBody(req)
             agregarToken()
