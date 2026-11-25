@@ -5,8 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.example.focusup.model.Activity
 import com.example.focusup.model.CreateActivityRequest
 import com.example.focusup.model.Grade
+import com.example.focusup.model.Group
 import com.example.focusup.model.RegisterGradeRequest
 import com.example.focusup.model.Rol
+import com.example.focusup.model.UserDto
 import com.example.focusup.network.StudentService
 import com.example.focusup.network.TeacherService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +20,10 @@ import kotlinx.coroutines.launch
 data class TasksUiState(
     val actividades: List<Activity> = emptyList(),
     val calificaciones: List<Grade> = emptyList(),
+    val grupos: List<Group> = emptyList(),
+    val estudiantes: List<UserDto> = emptyList(),
     val cargando: Boolean = false,
+    val cargandoModal: Boolean = false,
     val mensaje: String? = null,
     val error: String? = null,
     val filtroEstado: String = "Todas"
@@ -38,46 +43,131 @@ class TasksViewModel(
             if (rol == Rol.DOCENTE) {
                 val res = teacherService.getActivities()
                 res.onSuccess { lista ->
-                    _uiState.update { it.copy(cargando = false, actividades = lista) }
-                }.onFailure {
-                    _uiState.update { it.copy(cargando = false, actividades = getActividadesLocalesDefault()) }
+                    _uiState.update { it.copy(cargando = false, actividades = lista, error = null) }
+                }.onFailure { ex ->
+                    _uiState.update {
+                        it.copy(
+                            cargando = false,
+                            actividades = emptyList(),
+                            error = "Sin conexión con el servidor: ${ex.message}. Verifica la conexión con la API de FocusUp."
+                        )
+                    }
                 }
             } else {
                 val res = studentService.getActivities()
                 res.onSuccess { lista ->
-                    _uiState.update { it.copy(cargando = false, actividades = lista) }
-                }.onFailure {
-                    _uiState.update { it.copy(cargando = false, actividades = getActividadesLocalesDefault()) }
+                    _uiState.update { it.copy(cargando = false, actividades = lista, error = null) }
+                }.onFailure { ex ->
+                    _uiState.update {
+                        it.copy(
+                            cargando = false,
+                            actividades = emptyList(),
+                            error = "Sin conexión con el servidor: ${ex.message}. Verifica la conexión con la API de FocusUp."
+                        )
+                    }
                 }
             }
         }
     }
 
-    fun crearActividad(req: CreateActivityRequest) {
-        _uiState.update { it.copy(cargando = true) }
+    fun cargarGruposDocente() {
+        _uiState.update { it.copy(cargandoModal = true, error = null) }
+        viewModelScope.launch {
+            teacherService.getGroups()
+                .onSuccess { lista ->
+                    _uiState.update { it.copy(cargandoModal = false, grupos = lista) }
+                }
+                .onFailure { ex ->
+                    _uiState.update {
+                        it.copy(
+                            cargandoModal = false,
+                            error = "No se pudieron cargar los grupos del docente: ${ex.message}"
+                        )
+                    }
+                }
+        }
+    }
+
+    fun cargarEstudiantesDocente() {
+        _uiState.update { it.copy(cargandoModal = true, error = null) }
+        viewModelScope.launch {
+            teacherService.getStudents()
+                .onSuccess { lista ->
+                    _uiState.update { it.copy(cargandoModal = false, estudiantes = lista) }
+                }
+                .onFailure { ex ->
+                    _uiState.update {
+                        it.copy(
+                            cargandoModal = false,
+                            error = "No se pudieron cargar los estudiantes: ${ex.message}"
+                        )
+                    }
+                }
+        }
+    }
+
+    fun crearActividad(req: CreateActivityRequest, rolActual: Rol) {
+        if (req.titulo.isBlank()) {
+            _uiState.update { it.copy(error = "El título de la actividad no puede estar vacío.") }
+            return
+        }
+        if (req.fechaEntrega.isBlank()) {
+            _uiState.update { it.copy(error = "La fecha de entrega no puede estar vacía.") }
+            return
+        }
+        if (req.grupoId <= 0) {
+            _uiState.update { it.copy(error = "Debes seleccionar un grupo válido.") }
+            return
+        }
+
+        _uiState.update { it.copy(cargando = true, error = null) }
         viewModelScope.launch {
             val res = teacherService.createActivity(req)
-            res.onSuccess { nueva ->
+            res.onSuccess {
                 _uiState.update { st ->
                     st.copy(
                         cargando = false,
-                        mensaje = "Actividad creada con éxito.",
-                        actividades = listOf(nueva) + st.actividades
+                        mensaje = "Actividad creada con éxito."
                     )
                 }
+                cargarActividades(rolActual)
             }.onFailure { ex ->
-                _uiState.update { it.copy(cargando = false, error = ex.message ?: "No se pudo crear la actividad") }
+                _uiState.update { it.copy(cargando = false, error = "Error al crear actividad: ${ex.message}") }
             }
         }
     }
 
     fun registrarCalificacion(req: RegisterGradeRequest) {
+        if (req.actividadId <= 0) {
+            _uiState.update { it.copy(error = "ID de actividad inválido.") }
+            return
+        }
+        if (req.estudianteId <= 0) {
+            _uiState.update { it.copy(error = "Debes seleccionar un estudiante para calificar.") }
+            return
+        }
+        if (req.calificacion < 0.0 || req.calificacion > 10.0) {
+            _uiState.update { it.copy(error = "La calificación debe ser un valor numérico entre 0.0 y 10.0.") }
+            return
+        }
+
         viewModelScope.launch {
+            _uiState.update { it.copy(cargandoModal = true, error = null) }
             val res = teacherService.registerGrade(req)
             res.onSuccess {
-                _uiState.update { it.copy(mensaje = "Calificación registrada con éxito.") }
+                _uiState.update {
+                    it.copy(
+                        cargandoModal = false,
+                        mensaje = "Calificación registrada con éxito."
+                    )
+                }
             }.onFailure { ex ->
-                _uiState.update { it.copy(error = ex.message) }
+                _uiState.update {
+                    it.copy(
+                        cargandoModal = false,
+                        error = "Error al registrar calificación: ${ex.message}"
+                    )
+                }
             }
         }
     }
@@ -88,14 +178,5 @@ class TasksViewModel(
 
     fun limpiarMensajes() {
         _uiState.update { it.copy(mensaje = null, error = null) }
-    }
-
-    private fun getActividadesLocalesDefault(): List<Activity> {
-        return listOf(
-            Activity(1, 1, 1, "Proyecto Final KMP FocusUp", "Desarrollar el frontend en Kotlin Multiplatform con arquitectura MVVM.", "2024-10-25", "Programación Móvil"),
-            Activity(2, 1, 1, "Taller de Cálculo Multivariable", "Resolver la guía de ejercicios prácticos del capítulo 4.", "2024-10-22", "Matemáticas"),
-            Activity(3, 2, 2, "Diagrama ER de Base de Datos", "Diseñar las entidades y relaciones para la base de datos PostgreSQL.", "2024-10-28", "Bases de Datos"),
-            Activity(4, 2, 2, "Reporte de Calidad de Software", "Evaluar métricas y pruebas unitarias en Kotlin.", "2024-11-02", "Ingeniería de Software")
-        )
     }
 }
