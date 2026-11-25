@@ -28,6 +28,7 @@ dependencies {
     implementation(ktorLibs.server.core)
     implementation(ktorLibs.server.netty)
     implementation(libs.logback.classic)
+    implementation("at.favre.lib:bcrypt:0.10.2")
     implementation("com.zaxxer:HikariCP:5.1.0")
     implementation("com.mysql:mysql-connector-j:8.4.0")
 
