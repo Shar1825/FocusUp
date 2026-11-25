@@ -55,7 +55,7 @@ data class TeacherProfile(
     val especialidad: String = "General",
     val gruposAsignadosCount: Int = 0,
     val totalEstudiantesCount: Int = 0,
-    val entregasPendientesCalificar: Int = 0,
+    val entregasPendientesCalificar: Int? = null,
     val evidenciasPendientes: Int = 0
 )
 

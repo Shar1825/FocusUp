@@ -25,10 +25,12 @@ import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Pruebas de integración para las métricas reales de Estudiante, Docente y Administrador.
+ * Pruebas de integración para las métricas reales de Estudiante, Docente y Administrador,
+ * verificando el manejo de métricas no disponibles (entregas y asistencia).
  */
 class MetricasRealesTest {
 
@@ -80,11 +82,14 @@ class MetricasRealesTest {
         assertEquals(3, data.estudianteId)
         assertTrue(data.actividadesTotales >= 0)
         assertTrue(data.actividadesCompletadas >= 0)
-        assertTrue(data.actividadesEntregadas >= 0)
         assertTrue(data.actividadesPendientes >= 0)
         assertTrue(data.promedioCalificaciones >= 0.0)
         assertTrue(data.minutosEstudioHoy >= 30)
         assertTrue(data.rachaDias >= 1)
+
+        // Verificación de métricas no disponibles
+        assertNull(data.porcentajeAsistencia, "porcentajeAsistencia debe ser null al no haber datos en BD")
+        assertNull(data.actividadesEntregadas, "actividadesEntregadas debe ser null al no estar integrado el módulo de entregas")
     }
 
     @Test
@@ -106,8 +111,10 @@ class MetricasRealesTest {
         assertEquals(Rol.DOCENTE, data.rol)
         assertTrue(data.gruposAsignadosCount >= 0)
         assertTrue(data.totalEstudiantesCount >= 0)
-        assertTrue(data.entregasPendientesCalificar >= 0)
         assertTrue(data.evidenciasPendientes >= 0)
+
+        // Verificación de métricas no disponibles (entregas pendientes por calificar)
+        assertNull(data.entregasPendientesCalificar, "entregasPendientesCalificar debe ser null al no estar integrado el módulo de entregas")
     }
 
     @Test

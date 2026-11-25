@@ -170,42 +170,19 @@ object CalificacionRepository {
             estudianteNombre = estudiante?.nombre ?: "Estudiante #$estudianteId",
             actividadesTotales = totalActividades,
             actividadesCompletadas = completadas,
-            actividadesEntregadas = completadas,
+            actividadesEntregadas = null,
             actividadesPendientes = pendientes,
             promedioCalificaciones = (Math.round(promedio * 100.0) / 100.0),
-            porcentajeAsistencia = 95.0,
+            porcentajeAsistencia = null,
             minutosEstudioHoy = minutosHoy,
             rachaDias = racha
         )
     }
 
-    /** Entregas de actividades pendientes de calificar por un docente. */
-    fun contarEntregasPendientesDocente(docenteId: Int): Int {
-        val ds = DatabaseFactory.dataSource
-        if (ds == null) {
-            val actividadesDocente = ActividadRepository.obtenerPorDocenteId(docenteId)
-            var totalAsignadas = 0
-            for (act in actividadesDocente) {
-                val grupoEstudiantesCount = GrupoRepository.obtenerTodos().find { it.id == act.grupoId }?.cantidadEstudiantes ?: 1
-                totalAsignadas += grupoEstudiantesCount
-            }
-            val calificadas = calificacionesMap.values.count { c -> c.actividadId in actividadesDocente.map { it.id } }
-            return (totalAsignadas - calificadas).coerceAtLeast(0)
-        }
-        return ds.connection.use { c ->
-            c.prepareStatement(
-                "SELECT ( " +
-                        "(SELECT COUNT(*) FROM actividades a JOIN grupo_estudiantes ge ON ge.grupo_id = a.grupo_id WHERE a.docente_id = ?) " +
-                        "- " +
-                        "(SELECT COUNT(*) FROM calificaciones c JOIN actividades a ON a.id = c.actividad_id WHERE a.docente_id = ?) " +
-                        ") AS pendientes"
-            ).use { ps ->
-                ps.setInt(1, docenteId)
-                ps.setInt(2, docenteId)
-                ps.executeQuery().use { rs ->
-                    if (rs.next()) rs.getInt(1).coerceAtLeast(0) else 0
-                }
-            }
-        }
+    /** Entregas de actividades pendientes de calificar por un docente.
+     * Retorna null ("no disponible") ya que el bloque de entregas aún no está integrado en la BD.
+     */
+    fun contarEntregasPendientesDocente(docenteId: Int): Int? {
+        return null
     }
 }
