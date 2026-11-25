@@ -24,14 +24,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.focusup.model.AdminStatistics
 import com.example.focusup.model.LoginResponse
 import com.example.focusup.model.Rol
+import com.example.focusup.network.AdminService
+import com.example.focusup.ui.admin.AdminStatsCard
+import com.example.focusup.ui.admin.AdminUsersScreen
 import com.example.focusup.ui.estudio.StudyScreen
 import com.example.focusup.ui.estudio.StudyViewModel
 import com.example.focusup.ui.tareas.TasksScreen
 import com.example.focusup.ui.theme.BordeTarjeta
 import com.example.focusup.ui.theme.BordeTarjetaNeon
 import com.example.focusup.ui.theme.FocusUpColors
+import kotlinx.coroutines.launch
 
 /** Tabs de navegación inferior */
 enum class MainTab {
@@ -233,7 +238,7 @@ fun MainScreen(
 
                         MainTab.TAREAS -> TasksScreen(usuario = usuario)
 
-                        MainTab.USUARIOS -> PantallaProvisionalUsuarios()
+                        MainTab.USUARIOS -> AdminUsersScreen(adminActual = usuario)
 
                         MainTab.PERFIL -> ModuloPerfilContent(
                             usuario = usuario,
@@ -638,56 +643,6 @@ private fun DashboardTabContent(
 }
 
 @Composable
-private fun PantallaProvisionalUsuarios() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(20.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = FocusUpColors.TarjetaElevada),
-            border = BordeTarjetaNeon
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(30.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(text = "👥", fontSize = 48.sp)
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Gestión de Usuarios",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = FocusUpColors.Texto,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Próximamente",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = FocusUpColors.AzulElectrico,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Módulo en desarrollo para la administración centralizada de cuentas de estudiantes y docentes.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = FocusUpColors.TextoSecundario,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun GridProductividad() {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
@@ -975,6 +930,35 @@ private fun ModuloPerfilContent(
     usuario: LoginResponse,
     onCerrarSesion: () -> Unit
 ) {
+    val scope = rememberCoroutineScope()
+    var adminStats by remember { mutableStateOf<AdminStatistics?>(null) }
+    var cargandoStats by remember { mutableStateOf(false) }
+    var errorStats by remember { mutableStateOf<String?>(null) }
+
+    val adminService = remember { AdminService() }
+
+    fun cargarEstadisticasAdmin() {
+        if (usuario.rol == Rol.ADMINISTRADOR) {
+            cargandoStats = true
+            errorStats = null
+            scope.launch {
+                adminService.getStatistics()
+                    .onSuccess {
+                        adminStats = it
+                        cargandoStats = false
+                    }
+                    .onFailure { ex ->
+                        errorStats = "No se pudieron consultar estadísticas: ${ex.message}"
+                        cargandoStats = false
+                    }
+            }
+        }
+    }
+
+    LaunchedEffect(usuario.rol) {
+        cargarEstadisticasAdmin()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1037,39 +1021,80 @@ private fun ModuloPerfilContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        val panelInfo = remember(usuario.rol) { panelPara(usuario.rol) }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = FocusUpColors.TarjetaElevada),
-            border = BordeTarjetaNeon
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Text(
-                    text = panelInfo.titulo,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = FocusUpColors.Texto
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = panelInfo.descripcion,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = FocusUpColors.TextoSecundario
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                panelInfo.metricasClave.forEach { (label, valStr) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
+        if (usuario.rol == Rol.ADMINISTRADOR) {
+            if (cargandoStats) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(20.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = FocusUpColors.AzulElectrico)
+                }
+            } else if (errorStats != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = FocusUpColors.Tarjeta),
+                    border = BorderStroke(1.dp, FocusUpColors.Error)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(text = label, color = FocusUpColors.TextoSecundario, fontSize = 13.sp)
-                        Text(text = valStr, color = FocusUpColors.AzulElectrico, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("⚠️ Error de estadísticas", color = FocusUpColors.ErrorTexto, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = errorStats ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = FocusUpColors.TextoSecundario,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = { cargarEstadisticasAdmin() },
+                            colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.AzulElectrico)
+                        ) {
+                            Text("🔄 Reintentar", color = FocusUpColors.Fondo, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            } else {
+                AdminStatsCard(stats = adminStats ?: AdminStatistics())
+            }
+        } else {
+            val panelInfo = remember(usuario.rol) { panelPara(usuario.rol) }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = FocusUpColors.TarjetaElevada),
+                border = BordeTarjetaNeon
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        text = panelInfo.titulo,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = FocusUpColors.Texto
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = panelInfo.descripcion,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = FocusUpColors.TextoSecundario
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    panelInfo.metricasClave.forEach { (label, valStr) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = label, color = FocusUpColors.TextoSecundario, fontSize = 13.sp)
+                            Text(text = valStr, color = FocusUpColors.AzulElectrico, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
                     }
                 }
             }
