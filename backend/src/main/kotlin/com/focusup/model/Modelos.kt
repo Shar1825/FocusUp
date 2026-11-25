@@ -54,7 +54,9 @@ data class TeacherProfile(
     val rol: Rol = Rol.DOCENTE,
     val especialidad: String = "General",
     val gruposAsignadosCount: Int = 0,
-    val totalEstudiantesCount: Int = 0
+    val totalEstudiantesCount: Int = 0,
+    val entregasPendientesCalificar: Int = 0,
+    val evidenciasPendientes: Int = 0
 )
 
 /** Perfil extendido de Estudiante. */

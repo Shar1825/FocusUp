@@ -53,7 +53,10 @@ data class AcademicProgress(
     val estudianteNombre: String,
     val actividadesTotales: Int = 0,
     val actividadesCompletadas: Int = 0,
+    val actividadesEntregadas: Int = 0,
     val actividadesPendientes: Int = 0,
     val promedioCalificaciones: Double = 0.0,
-    val porcentajeAsistencia: Double = 100.0
+    val porcentajeAsistencia: Double = 100.0,
+    val minutosEstudioHoy: Int = 0,
+    val rachaDias: Int = 0
 )

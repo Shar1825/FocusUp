@@ -162,14 +162,50 @@ object CalificacionRepository {
         val pendientes = (totalActividades - completadas).coerceAtLeast(0)
         val promedio = if (completadas > 0) calificaciones.map { it.calificacion }.average() else 0.0
 
+        val minutosHoy = EstudioRepository.obtenerMinutosEstudioHoy(estudianteId)
+        val racha = EstudioRepository.obtenerRachaDiasValidados(estudianteId)
+
         return AcademicProgress(
             estudianteId = estudianteId,
             estudianteNombre = estudiante?.nombre ?: "Estudiante #$estudianteId",
             actividadesTotales = totalActividades,
             actividadesCompletadas = completadas,
+            actividadesEntregadas = completadas,
             actividadesPendientes = pendientes,
             promedioCalificaciones = (Math.round(promedio * 100.0) / 100.0),
-            porcentajeAsistencia = 95.0
+            porcentajeAsistencia = 95.0,
+            minutosEstudioHoy = minutosHoy,
+            rachaDias = racha
         )
+    }
+
+    /** Entregas de actividades pendientes de calificar por un docente. */
+    fun contarEntregasPendientesDocente(docenteId: Int): Int {
+        val ds = DatabaseFactory.dataSource
+        if (ds == null) {
+            val actividadesDocente = ActividadRepository.obtenerPorDocenteId(docenteId)
+            var totalAsignadas = 0
+            for (act in actividadesDocente) {
+                val grupoEstudiantesCount = GrupoRepository.obtenerTodos().find { it.id == act.grupoId }?.cantidadEstudiantes ?: 1
+                totalAsignadas += grupoEstudiantesCount
+            }
+            val calificadas = calificacionesMap.values.count { c -> c.actividadId in actividadesDocente.map { it.id } }
+            return (totalAsignadas - calificadas).coerceAtLeast(0)
+        }
+        return ds.connection.use { c ->
+            c.prepareStatement(
+                "SELECT ( " +
+                        "(SELECT COUNT(*) FROM actividades a JOIN grupo_estudiantes ge ON ge.grupo_id = a.grupo_id WHERE a.docente_id = ?) " +
+                        "- " +
+                        "(SELECT COUNT(*) FROM calificaciones c JOIN actividades a ON a.id = c.actividad_id WHERE a.docente_id = ?) " +
+                        ") AS pendientes"
+            ).use { ps ->
+                ps.setInt(1, docenteId)
+                ps.setInt(2, docenteId)
+                ps.executeQuery().use { rs ->
+                    if (rs.next()) rs.getInt(1).coerceAtLeast(0) else 0
+                }
+            }
+        }
     }
 }

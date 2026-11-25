@@ -4,6 +4,7 @@ import com.focusup.dto.ChangePasswordRequest
 import com.focusup.dto.UpdateProfileRequest
 import com.focusup.model.*
 import com.focusup.repository.CalificacionRepository
+import com.focusup.repository.EstudioRepository
 import com.focusup.repository.GrupoRepository
 import com.focusup.repository.UsuarioRepository
 
@@ -21,13 +22,17 @@ object ProfileService {
             Rol.DOCENTE -> {
                 val grupos = GrupoRepository.obtenerPorDocenteId(userId)
                 val estudiantes = GrupoRepository.obtenerEstudiantesDeGruposDocente(userId)
+                val entregasPendientes = CalificacionRepository.contarEntregasPendientesDocente(userId)
+                val evidenciasPendientes = EstudioRepository.contarEvidenciasPendientesDocente(userId)
                 TeacherProfile(
                     id = user.id,
                     nombre = user.nombre,
                     correo = user.correo,
                     rol = Rol.DOCENTE,
                     gruposAsignadosCount = grupos.size,
-                    totalEstudiantesCount = estudiantes.size
+                    totalEstudiantesCount = estudiantes.size,
+                    entregasPendientesCalificar = entregasPendientes,
+                    evidenciasPendientes = evidenciasPendientes
                 )
             }
             Rol.ESTUDIANTE -> {
