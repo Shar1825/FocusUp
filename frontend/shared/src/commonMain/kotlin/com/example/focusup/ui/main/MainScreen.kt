@@ -2,14 +2,10 @@ package com.example.focusup.ui.main
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -39,11 +34,38 @@ import com.example.focusup.ui.theme.BordeTarjetaNeon
 import com.example.focusup.ui.theme.FocusUpColors
 
 /** Tabs de navegación inferior */
-enum class MainTab(val titulo: String, val icono: String) {
-    INICIO("Inicio", "🏠"),
-    ESTUDIO("Estudio", "⏱️"),
-    TAREAS("Tareas", "📋"),
-    PERFIL("Perfil", "👤")
+enum class MainTab {
+    INICIO,
+    ESTUDIO,
+    TAREAS,
+    USUARIOS,
+    PERFIL
+}
+
+private data class TabInfo(
+    val tab: MainTab,
+    val titulo: String,
+    val icono: String
+)
+
+private fun tabsParaRol(rol: Rol): List<TabInfo> = when (rol) {
+    Rol.ESTUDIANTE -> listOf(
+        TabInfo(MainTab.INICIO, "Inicio", "🏠"),
+        TabInfo(MainTab.ESTUDIO, "Estudio", "⏱️"),
+        TabInfo(MainTab.TAREAS, "Tareas", "📋"),
+        TabInfo(MainTab.PERFIL, "Perfil", "👤")
+    )
+    Rol.DOCENTE -> listOf(
+        TabInfo(MainTab.INICIO, "Inicio", "🏠"),
+        TabInfo(MainTab.ESTUDIO, "Validación", "⏱️"),
+        TabInfo(MainTab.TAREAS, "Actividades", "📋"),
+        TabInfo(MainTab.PERFIL, "Perfil", "👤")
+    )
+    Rol.ADMINISTRADOR -> listOf(
+        TabInfo(MainTab.INICIO, "Inicio", "🏠"),
+        TabInfo(MainTab.USUARIOS, "Usuarios", "👥"),
+        TabInfo(MainTab.PERFIL, "Perfil", "👤")
+    )
 }
 
 /** Tarea local para la UI de demostración/interacción */
@@ -194,9 +216,14 @@ fun MainScreen(
                                 }
                             },
                             onIniciarEstudio = { tabActual = MainTab.ESTUDIO },
-                            onNuevaTarea = { mostrarDialogoNuevaTarea = true },
-                            onVerEstadisticas = { tabActual = MainTab.ESTUDIO },
-                            onSubirEvidencia = { tabActual = MainTab.ESTUDIO }
+                            onNuevaTarea = {
+                                if (usuario.rol == Rol.DOCENTE) {
+                                    mostrarDialogoNuevaTarea = true
+                                }
+                            },
+                            onVerEstadisticas = { tabActual = MainTab.PERFIL },
+                            onSubirEvidencia = { tabActual = MainTab.ESTUDIO },
+                            onGestionUsuarios = { tabActual = MainTab.USUARIOS }
                         )
 
                         MainTab.ESTUDIO -> StudyScreen(
@@ -205,6 +232,8 @@ fun MainScreen(
                         )
 
                         MainTab.TAREAS -> TasksScreen(usuario = usuario)
+
+                        MainTab.USUARIOS -> PantallaProvisionalUsuarios()
 
                         MainTab.PERFIL -> ModuloPerfilContent(
                             usuario = usuario,
@@ -215,6 +244,7 @@ fun MainScreen(
             }
 
             NavegacionInferiorFuturista(
+                usuario = usuario,
                 tabSeleccionado = tabActual,
                 onTabSeleccionado = { tabActual = it }
             )
@@ -378,7 +408,8 @@ private fun DashboardTabContent(
     onIniciarEstudio: () -> Unit,
     onNuevaTarea: () -> Unit,
     onVerEstadisticas: () -> Unit,
-    onSubirEvidencia: () -> Unit
+    onSubirEvidencia: () -> Unit,
+    onGestionUsuarios: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -460,84 +491,136 @@ private fun DashboardTabContent(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            AccesoRapidoCard(
-                titulo = "Estudiar",
-                icono = "🚀",
-                subtitulo = "Iniciar Pomodoro",
-                gradient = Brush.horizontalGradient(listOf(FocusUpColors.AzulElectrico, FocusUpColors.AzulNeon)),
-                modifier = Modifier.weight(1f),
-                onClick = onIniciarEstudio
-            )
+        when (usuario.rol) {
+            Rol.ESTUDIANTE -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    AccesoRapidoCard(
+                        titulo = "Estudiar",
+                        icono = "🚀",
+                        subtitulo = "Iniciar Pomodoro",
+                        gradient = Brush.horizontalGradient(listOf(FocusUpColors.AzulElectrico, FocusUpColors.AzulNeon)),
+                        modifier = Modifier.weight(1f),
+                        onClick = onIniciarEstudio
+                    )
 
-            AccesoRapidoCard(
-                titulo = "Nueva Tarea",
-                icono = "➕",
-                subtitulo = "Crear pendiente",
-                gradient = Brush.horizontalGradient(listOf(FocusUpColors.PurpuraNeon, FocusUpColors.RosaNeon)),
-                modifier = Modifier.weight(1f),
-                onClick = onNuevaTarea
-            )
-        }
+                    AccesoRapidoCard(
+                        titulo = "Mis Tareas",
+                        icono = "📋",
+                        subtitulo = "Ver pendientes",
+                        gradient = Brush.horizontalGradient(listOf(FocusUpColors.PurpuraNeon, FocusUpColors.RosaNeon)),
+                        modifier = Modifier.weight(1f),
+                        onClick = onNuevaTarea
+                    )
+                }
 
-        Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            AccesoRapidoCard(
-                titulo = "Estadísticas",
-                icono = "📊",
-                subtitulo = "Ver progreso",
-                gradient = Brush.horizontalGradient(listOf(Color(0xFF3B82F6), Color(0xFF1D4ED8))),
-                modifier = Modifier.weight(1f),
-                onClick = onVerEstadisticas
-            )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    AccesoRapidoCard(
+                        titulo = "Mi Perfil",
+                        icono = "📊",
+                        subtitulo = "Ver progreso",
+                        gradient = Brush.horizontalGradient(listOf(Color(0xFF3B82F6), Color(0xFF1D4ED8))),
+                        modifier = Modifier.weight(1f),
+                        onClick = onVerEstadisticas
+                    )
 
-            AccesoRapidoCard(
-                titulo = "Evidencia",
-                icono = "📷",
-                subtitulo = "Subir foto",
-                gradient = Brush.horizontalGradient(listOf(FocusUpColors.Ambar, FocusUpColors.Naranja)),
-                modifier = Modifier.weight(1f),
-                onClick = onSubirEvidencia
-            )
-        }
+                    AccesoRapidoCard(
+                        titulo = "Evidencia",
+                        icono = "📷",
+                        subtitulo = "Subir foto",
+                        gradient = Brush.horizontalGradient(listOf(FocusUpColors.Ambar, FocusUpColors.Naranja)),
+                        modifier = Modifier.weight(1f),
+                        onClick = onSubirEvidencia
+                    )
+                }
+            }
 
-        Spacer(modifier = Modifier.height(24.dp))
+            Rol.DOCENTE -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    AccesoRapidoCard(
+                        titulo = "Validar",
+                        icono = "⏱️",
+                        subtitulo = "Revisar evidencias",
+                        gradient = Brush.horizontalGradient(listOf(FocusUpColors.AzulElectrico, FocusUpColors.AzulNeon)),
+                        modifier = Modifier.weight(1f),
+                        onClick = onIniciarEstudio
+                    )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Tareas Pendientes (${tareas.count { !it.completada }})",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = FocusUpColors.Texto
-            )
+                    AccesoRapidoCard(
+                        titulo = "Nueva Actividad",
+                        icono = "➕",
+                        subtitulo = "Crear tarea",
+                        gradient = Brush.horizontalGradient(listOf(FocusUpColors.PurpuraNeon, FocusUpColors.RosaNeon)),
+                        modifier = Modifier.weight(1f),
+                        onClick = onNuevaTarea
+                    )
+                }
+            }
 
-            TextButton(onClick = onNuevaTarea) {
-                Text("+ Agregar", color = FocusUpColors.AzulElectrico, fontWeight = FontWeight.Bold)
+            Rol.ADMINISTRADOR -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    AccesoRapidoCard(
+                        titulo = "Usuarios",
+                        icono = "👥",
+                        subtitulo = "Gestión central",
+                        gradient = Brush.horizontalGradient(listOf(FocusUpColors.AzulElectrico, FocusUpColors.PurpuraNeon)),
+                        modifier = Modifier.weight(1f),
+                        onClick = onGestionUsuarios
+                    )
+
+                    AccesoRapidoCard(
+                        titulo = "Perfil Admin",
+                        icono = "👤",
+                        subtitulo = "Configuración",
+                        gradient = Brush.horizontalGradient(listOf(Color(0xFF3B82F6), Color(0xFF1D4ED8))),
+                        modifier = Modifier.weight(1f),
+                        onClick = onVerEstadisticas
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        if (usuario.rol == Rol.ESTUDIANTE) {
+            Spacer(modifier = Modifier.height(24.dp))
 
-        tareas.take(3).forEach { tarea ->
-            ItemTareaFuturista(tarea = tarea, onToggle = { onToggleTarea(tarea.id) })
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Tareas Pendientes (${tareas.count { !it.completada }})",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = FocusUpColors.Texto
+                )
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
+
+            tareas.take(3).forEach { tarea ->
+                ItemTareaFuturista(tarea = tarea, onToggle = { onToggleTarea(tarea.id) })
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "Actividades de Hoy",
+            text = "Actividades del Día",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = FocusUpColors.Texto
@@ -551,6 +634,56 @@ private fun DashboardTabContent(
         }
 
         Spacer(modifier = Modifier.height(30.dp))
+    }
+}
+
+@Composable
+private fun PantallaProvisionalUsuarios() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(20.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = FocusUpColors.TarjetaElevada),
+            border = BordeTarjetaNeon
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(30.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(text = "👥", fontSize = 48.sp)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Gestión de Usuarios",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = FocusUpColors.Texto,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Próximamente",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = FocusUpColors.AzulElectrico,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Módulo en desarrollo para la administración centralizada de cuentas de estudiantes y docentes.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = FocusUpColors.TextoSecundario,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
     }
 }
 
@@ -959,9 +1092,12 @@ private fun ModuloPerfilContent(
 
 @Composable
 private fun NavegacionInferiorFuturista(
+    usuario: LoginResponse,
     tabSeleccionado: MainTab,
     onTabSeleccionado: (MainTab) -> Unit
 ) {
+    val tabs = remember(usuario.rol) { tabsParaRol(usuario.rol) }
+
     Surface(
         color = FocusUpColors.TarjetaElevada,
         tonalElevation = 8.dp,
@@ -974,8 +1110,8 @@ private fun NavegacionInferiorFuturista(
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            MainTab.entries.forEach { tab ->
-                val seleccionado = tab == tabSeleccionado
+            tabs.forEach { item ->
+                val seleccionado = item.tab == tabSeleccionado
                 val colorIcono by animateColorAsState(
                     if (seleccionado) FocusUpColors.AzulElectrico else FocusUpColors.TextoSecundario,
                     label = "color_tab"
@@ -984,13 +1120,13 @@ private fun NavegacionInferiorFuturista(
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
-                        .clickable { onTabSeleccionado(tab) }
+                        .clickable { onTabSeleccionado(item.tab) }
                         .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
-                    Text(text = tab.icono, fontSize = 20.sp)
+                    Text(text = item.icono, fontSize = 20.sp)
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = tab.titulo,
+                        text = item.titulo,
                         fontSize = 11.sp,
                         fontWeight = if (seleccionado) FontWeight.Bold else FontWeight.Normal,
                         color = colorIcono

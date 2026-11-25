@@ -80,7 +80,8 @@ fun TasksScreen(
                     )
                 }
 
-                if (usuario.rol == Rol.DOCENTE || usuario.rol == Rol.ADMINISTRADOR) {
+                // El botón para crear actividades solo se muestra para el rol DOCENTE
+                if (usuario.rol == Rol.DOCENTE) {
                     IconButton(
                         onClick = { mostrarModalCrear = true },
                         modifier = Modifier
@@ -145,7 +146,7 @@ fun TasksScreen(
                     items(actividadesFiltradas, key = { it.id }) { act ->
                         ItemActividadAcademica(
                             actividad = act,
-                            esDocente = usuario.rol == Rol.DOCENTE || usuario.rol == Rol.ADMINISTRADOR,
+                            esDocente = usuario.rol == Rol.DOCENTE,
                             onCalificar = { actividadParaCalificar = act }
                         )
                     }
@@ -198,7 +199,7 @@ fun TasksScreen(
     }
 
     // Modal Crear Actividad (Docente)
-    if (mostrarModalCrear) {
+    if (mostrarModalCrear && usuario.rol == Rol.DOCENTE) {
         ModalCrearActividad(
             onDesestimar = { mostrarModalCrear = false },
             onGuardar = { req ->
@@ -210,21 +211,23 @@ fun TasksScreen(
 
     // Modal Calificar Estudiante (Docente)
     actividadParaCalificar?.let { act ->
-        ModalCalificarActividad(
-            actividad = act,
-            onDesestimar = { actividadParaCalificar = null },
-            onRegistrar = { nota, obs ->
-                viewModel.registrarCalificacion(
-                    RegisterGradeRequest(
-                        actividadId = act.id,
-                        estudianteId = 1,
-                        calificacion = nota,
-                        observaciones = obs
+        if (usuario.rol == Rol.DOCENTE) {
+            ModalCalificarActividad(
+                actividad = act,
+                onDesestimar = { actividadParaCalificar = null },
+                onRegistrar = { nota, obs ->
+                    viewModel.registrarCalificacion(
+                        RegisterGradeRequest(
+                            actividadId = act.id,
+                            estudianteId = 1,
+                            calificacion = nota,
+                            observaciones = obs
+                        )
                     )
-                )
-                actividadParaCalificar = null
-            }
-        )
+                    actividadParaCalificar = null
+                }
+            )
+        }
     }
 }
 
@@ -314,7 +317,7 @@ private fun ModalCrearActividad(
 ) {
     var titulo by remember { mutableStateOf("") }
     var descripcion by remember { mutableStateOf("") }
-    var fechaEntrega by remember { mutableStateOf("2024-11-15") }
+    var fechaEntrega by remember { mutableStateOf("2025-11-15") }
 
     AlertDialog(
         onDismissRequest = onDesestimar,
