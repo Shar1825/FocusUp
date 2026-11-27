@@ -249,6 +249,16 @@ fun LoginScreen(
                         }
                     }
 
+
+                    Text(
+                        text = "Sharon Eunice Mejia Santuario",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = FocusUpColors.TextoSecundario,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
                     // Botón Iniciar Sesión
                     Button(
                         onClick = onIniciarSesion,
