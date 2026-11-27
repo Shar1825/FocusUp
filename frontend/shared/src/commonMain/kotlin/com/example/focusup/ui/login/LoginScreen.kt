@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -158,7 +159,17 @@ fun LoginScreen(
                         QuickUserChip("Admin", "admin@focusup.com", onCorreoChange, onPasswordChange)
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "López Hernández Luis Ángel",
+                        fontSize = 12.sp,
+                        fontStyle = FontStyle.Italic,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     // Campo Correo
                     OutlinedTextField(
