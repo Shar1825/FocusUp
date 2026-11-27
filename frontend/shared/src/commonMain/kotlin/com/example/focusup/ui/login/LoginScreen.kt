@@ -296,7 +296,12 @@ private fun QuickUserChip(
         modifier = Modifier
             .clickable {
                 onCorreoChange(correo)
-                onPasswordChange("123456")
+                val passwordReal = when (correo) {
+                    "admin@focusup.com" -> "admin123"
+                    "docente@focusup.com" -> "docente123"
+                    else -> "estudiante123"
+                }
+                onPasswordChange(passwordReal)
             },
         shape = RoundedCornerShape(20.dp),
         color = FocusUpColors.Tarjeta,
