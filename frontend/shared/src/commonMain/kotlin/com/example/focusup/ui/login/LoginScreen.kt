@@ -108,6 +108,7 @@ fun LoginScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
+                            text = "Diego Islas Morales",
                             text = "FU",
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 28.sp,
