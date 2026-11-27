@@ -45,7 +45,7 @@ class LoginViewModel(
 
     fun onToggleVerPassword() = _uiState.update { it.copy(verPassword = !it.verPassword) }
 
-    /** Valida los campos y consulta al backend. */
+    /** Valida los campos, consulta al backend en un bloque try/catch/finally y maneja el acceso por rol. */
     fun iniciarSesion() {
         val actual = _uiState.value
         if (actual.cargando) return
@@ -58,27 +58,34 @@ class LoginViewModel(
         _uiState.update { it.copy(cargando = true, error = null) }
 
         viewModelScope.launch {
-            repository.login(actual.correo.trim(), actual.password)
-                .onSuccess { usuario ->
-                    if (esPlataformaWeb && usuario.rol != Rol.ADMINISTRADOR) {
-                        repository.logout()
-                        _uiState.update {
-                            it.copy(
-                                cargando = false,
-                                password = "",
-                                usuario = null,
-                                error = "El acceso web es solo para administradores."
-                            )
+            try {
+                repository.login(actual.correo.trim(), actual.password)
+                    .onSuccess { usuario ->
+                        if (esPlataformaWeb && usuario.rol != Rol.ADMINISTRADOR) {
+                            runCatching { repository.logout() }
+                            _uiState.update {
+                                it.copy(
+                                    password = "",
+                                    usuario = null,
+                                    error = "El acceso web es solo para administradores."
+                                )
+                            }
+                        } else {
+                            _uiState.update { it.copy(password = "", usuario = usuario) }
                         }
-                    } else {
-                        _uiState.update { it.copy(cargando = false, password = "", usuario = usuario) }
                     }
-                }
-                .onFailure { ex ->
-                    _uiState.update {
-                        it.copy(cargando = false, error = ex.message ?: "Credenciales o conexión no válidas.")
+                    .onFailure { ex ->
+                        _uiState.update {
+                            it.copy(error = ex.message ?: "Credenciales o conexión no válidas.")
+                        }
                     }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(error = "No se pudo conectar con el servidor: ${e.message ?: "Error de conexión"}")
                 }
+            } finally {
+                _uiState.update { it.copy(cargando = false) }
+            }
         }
     }
 

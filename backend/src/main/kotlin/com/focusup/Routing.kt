@@ -8,15 +8,26 @@ import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
-
-/** Configuración de CORS para acceso web del Administrador y clientes. */
+/** Configuración de CORS para acceso web remoto y local del Administrador. */
 fun Application.configureCORS() {
     install(CORS) {
         // Desarrollo local
         allowHost("localhost:8080", schemes = listOf("http"))
         allowHost("127.0.0.1:8080", schemes = listOf("http"))
-        // Producción: agrega aquí el dominio de tu web cuando la despliegues
-        // allowHost("tu-dominio.up.railway.app", schemes = listOf("https"))
+
+        // Host remotos desde variable de entorno CORS_ALLOWED_HOSTS (separados por comas)
+        val extraHosts = System.getenv("CORS_ALLOWED_HOSTS")
+            ?.split(",")
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+
+        for (h in extraHosts) {
+            val hostClean = h.removePrefix("http://").removePrefix("https://").trimEnd('/')
+            if (hostClean.isNotBlank()) {
+                allowHost(hostClean, schemes = listOf("https", "http"))
+            }
+        }
 
         allowMethod(HttpMethod.Options)
         allowMethod(HttpMethod.Put)
@@ -34,7 +45,7 @@ fun Application.configureCORS() {
 /** Configuración global de rutas e inicialización de la API FocusUp. */
 fun Application.configureRouting() {
 
-    // Configurar CORS para peticiones web
+    // Configurar CORS para peticiones web antes de routing
     configureCORS()
 
     // Inicializa y valida el esquema MySQL y registra el estado en el log al arrancar el servidor

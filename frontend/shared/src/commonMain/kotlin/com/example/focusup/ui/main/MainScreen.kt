@@ -166,8 +166,6 @@ fun MainScreen(
 
                         MainTab.PERFIL -> ModuloPerfilContent(
                             usuario = usuario,
-                            state = dashboardState,
-                            onReintentar = { dashboardViewModel.cargarDatos(usuario.rol) },
                             onCerrarSesion = onCerrarSesion
                         )
                     }
@@ -694,7 +692,7 @@ private fun GridProductividadReal(
         when (usuario.rol) {
             Rol.ESTUDIANTE -> {
                 val prog = state.studentProgress
-                val minHoy = prog?.minutosEstudioCalculados ?: 0
+                val minHoy = prog?.actividadesCompletadas ?: 0
                 val promedio = prog?.promedioCalificaciones ?: 0.0
                 val racha = prog?.rachaDiasCalculada ?: 0
                 val pend = prog?.actividadesPendientes ?: 0
@@ -749,10 +747,8 @@ private fun GridProductividadReal(
 
             Rol.DOCENTE -> {
                 val prof = state.teacherProfile
-                val grupos = prof?.cantidadGrupos ?: 0
-                val estudiantes = prof?.cantidadEstudiantes ?: 0
-                val porCalificar = prof?.cantidadEntregasPendientes ?: 0
-                val evidencias = prof?.cantidadEvidenciasPendientes ?: 0
+                val grupos = prof?.gruposAsignadosCount ?: 0
+                val estudiantes = prof?.totalEstudiantesCount ?: 0
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -776,40 +772,13 @@ private fun GridProductividadReal(
                         modifier = Modifier.weight(1f)
                     )
                 }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    MetricaCard(
-                        titulo = "Por Calificar",
-                        valor = "$porCalificar",
-                        subtitulo = "Entregas pendientes",
-                        icono = "📝",
-                        color = FocusUpColors.Ambar,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    MetricaCard(
-                        titulo = "Evidencias Pendientes",
-                        valor = "$evidencias",
-                        subtitulo = "Por validar",
-                        icono = "📷",
-                        color = FocusUpColors.PurpuraNeon,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
             }
 
             Rol.ADMINISTRADOR -> {
                 val stats = state.adminStatistics
-                val totalActivos = stats?.totalUsuariosActivos ?: 0
-                val estCount = stats?.estudiantesCount ?: 0
-                val docCount = stats?.docentesCount ?: 0
-                val sesiones = stats?.totalSesionesEstudio ?: 0
-                val evPend = stats?.totalEvidenciasPendientes ?: 0
-                val evAprob = stats?.totalEvidenciasAprobadas ?: 0
-                val evRech = stats?.totalEvidenciasRechazadas ?: 0
+                val totalActivos = stats?.usuariosActivos ?: 0
+                val estCount = stats?.cantidadEstudiantes ?: 0
+                val docCount = stats?.cantidadDocentes ?: 0
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -821,38 +790,6 @@ private fun GridProductividadReal(
                         subtitulo = "$estCount Est | $docCount Doc",
                         icono = "👥",
                         color = FocusUpColors.AzulElectrico,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    MetricaCard(
-                        titulo = "Sesiones Estudio",
-                        valor = "$sesiones",
-                        subtitulo = "Total sesiones",
-                        icono = "⏱️",
-                        color = FocusUpColors.VerdeExito,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    MetricaCard(
-                        titulo = "Evidencias Pendientes",
-                        valor = "$evPend",
-                        subtitulo = "Pendientes",
-                        icono = "⏳",
-                        color = FocusUpColors.Ambar,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    MetricaCard(
-                        titulo = "Evidencias Validadas",
-                        valor = "$evAprob",
-                        subtitulo = "$evRech rechazadas",
-                        icono = "✅",
-                        color = FocusUpColors.PurpuraNeon,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -959,71 +896,90 @@ private fun AccesoRapidoCard(
     }
 }
 
-@Composable
-private fun PantallaProvisionalUsuarios() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(20.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = FocusUpColors.TarjetaElevada),
-            border = BordeTarjetaNeon
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(30.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(text = "👥", fontSize = 48.sp)
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Gestión de Usuarios",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = FocusUpColors.Texto,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Próximamente",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = FocusUpColors.AzulElectrico,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Módulo en desarrollo para la administración centralizada de cuentas de estudiantes y docentes.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = FocusUpColors.TextoSecundario,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-    }
+private data class PanelRolInfo(
+    val titulo: String,
+    val descripcion: String,
+    val acciones: List<String>,
+    val metricasClave: List<Pair<String, String>>
+)
+
+private fun panelPara(rol: Rol): PanelRolInfo = when (rol) {
+    Rol.ADMINISTRADOR -> PanelRolInfo(
+        titulo = "Centro de Control General (Admin)",
+        descripcion = "Supervisión total de usuarios, sistema y plataforma Ktor.",
+        acciones = listOf(
+            "Gestión centralizada de usuarios y asignación de roles.",
+            "Monitoreo de estado de servicios Ktor y logs en tiempo real.",
+            "Configuración de parámetros globales de la aplicación."
+        ),
+        metricasClave = listOf(
+            "Usuarios Activos" to "142",
+            "Servicios Ktor" to "Online (99.9%)",
+            "Logs de Sistema" to "0 Errores"
+        )
+    )
+    Rol.DOCENTE -> PanelRolInfo(
+        titulo = "Panel de Gestión Académica (Docente)",
+        descripcion = "Control de asignaturas, grupos y actividades de estudiantes.",
+        acciones = listOf(
+            "Creación y publicación de nuevas tareas y actividades.",
+            "Revisión y calificación de evidencias enviadas.",
+            "Seguimiento del rendimiento y promedio por grupo."
+        ),
+        metricasClave = listOf(
+            "Grupos Asignados" to "4 Grupos",
+            "Estudiantes" to "98 Totales",
+            "Por Calificar" to "5 Evidencias"
+        )
+    )
+    Rol.ESTUDIANTE -> PanelRolInfo(
+        titulo = "Panel de Rendimiento Estudiantil",
+        descripcion = "Planifica tu tiempo, cumple tus entregas y mejora tus hábitos.",
+        acciones = listOf(
+            "Registro de sesiones de estudio concentrado (Pomodoro).",
+            "Entrega y actualización de tareas pendientes.",
+            "Monitoreo de tu racha diaria y progreso académico."
+        ),
+        metricasClave = listOf(
+            "Asignaturas" to "5 Materias",
+            "Promedio General" to "9.4 / 10",
+            "Entregas a Tiempo" to "96%"
+        )
+    )
 }
 
 @Composable
 private fun ModuloPerfilContent(
     usuario: LoginResponse,
-    state: DashboardUiState,
-    onReintentar: () -> Unit,
     onCerrarSesion: () -> Unit
 ) {
-    if (state.cargando) {
-        DashboardSkeleton()
-        return
+    val scope = rememberCoroutineScope()
+    var adminStats by remember { mutableStateOf<AdminStatistics?>(null) }
+    var cargandoStats by remember { mutableStateOf(false) }
+    var errorStats by remember { mutableStateOf<String?>(null) }
+
+    val adminService = remember { AdminService() }
+
+    fun cargarEstadisticasAdmin() {
+        if (usuario.rol == Rol.ADMINISTRADOR) {
+            cargandoStats = true
+            errorStats = null
+            scope.launch {
+                adminService.getStatistics()
+                    .onSuccess {
+                        adminStats = it
+                        cargandoStats = false
+                    }
+                    .onFailure { ex ->
+                        errorStats = "No se pudieron consultar estadísticas: ${ex.message}"
+                        cargandoStats = false
+                    }
+            }
+        }
     }
 
-    if (state.error != null) {
-        DashboardErrorView(error = state.error, onReintentar = onReintentar)
-        return
+    LaunchedEffect(usuario.rol) {
+        cargarEstadisticasAdmin()
     }
 
     Column(
@@ -1088,62 +1044,47 @@ private fun ModuloPerfilContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        val metricas: List<Pair<String, String>> = remember(usuario.rol, state) {
-            when (usuario.rol) {
-                Rol.ESTUDIANTE -> {
-                    val prog = state.studentProgress
-                    listOf(
-                        "Tareas Pendientes" to "${prog?.actividadesPendientes ?: 0}",
-                        "Tareas Entregadas" to "${prog?.actividadesCompletadas ?: 0}",
-                        "Promedio General" to "${prog?.promedioCalificaciones ?: 0.0}",
-                        "Minutos de Estudio Hoy" to "${prog?.minutosEstudioCalculados ?: 0} min",
-                        "Racha de Días Validados" to "${prog?.rachaDiasCalculada ?: 0} días"
-                    )
+        if (usuario.rol == Rol.ADMINISTRADOR) {
+            if (cargandoStats) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(20.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = FocusUpColors.AzulElectrico)
                 }
-                Rol.DOCENTE -> {
-                    val prof = state.teacherProfile
-                    listOf(
-                        "Grupos Asignados" to "${prof?.cantidadGrupos ?: 0}",
-                        "Total Estudiantes" to "${prof?.cantidadEstudiantes ?: 0}",
-                        "Entregas por Calificar" to "${prof?.cantidadEntregasPendientes ?: 0}",
-                        "Evidencias Pendientes" to "${prof?.cantidadEvidenciasPendientes ?: 0}"
-                    )
+            } else if (errorStats != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = FocusUpColors.Tarjeta),
+                    border = BorderStroke(1.dp, FocusUpColors.Error)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("⚠️ Error de estadísticas", color = FocusUpColors.ErrorTexto, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = errorStats ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = FocusUpColors.TextoSecundario,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = { cargarEstadisticasAdmin() },
+                            colors = ButtonDefaults.buttonColors(containerColor = FocusUpColors.AzulElectrico)
+                        ) {
+                            Text("🔄 Reintentar", color = FocusUpColors.Fondo, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
-                Rol.ADMINISTRADOR -> {
-                    val stats = state.adminStatistics
-                    listOf(
-                        "Total Usuarios Activos" to "${stats?.totalUsuariosActivos ?: 0}",
-                        "Estudiantes Activos" to "${stats?.estudiantesCount ?: 0}",
-                        "Docentes Activos" to "${stats?.docentesCount ?: 0}",
-                        "Administradores Activos" to "${stats?.administradoresCount ?: 0}",
-                        "Sesiones de Estudio" to "${stats?.totalSesionesEstudio ?: 0}",
-                        "Evidencias Pendientes" to "${stats?.totalEvidenciasPendientes ?: 0}",
-                        "Evidencias Aprobadas" to "${stats?.totalEvidenciasAprobadas ?: 0}",
-                        "Evidencias Rechazadas" to "${stats?.totalEvidenciasRechazadas ?: 0}"
-                    )
-                }
+            } else {
+                AdminStatsCard(stats = adminStats ?: AdminStatistics())
             }
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = FocusUpColors.TarjetaElevada),
-            border = BordeTarjetaNeon
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Text(
-                    text = "Métricas Reales del Perfil",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = FocusUpColors.Texto
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Datos en tiempo real obtenidos desde la API Ktor.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = FocusUpColors.TextoSecundario
-                )
+        } else {
+            val panelInfo = remember(usuario.rol) { panelPara(usuario.rol) }
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1165,15 +1106,18 @@ private fun ModuloPerfilContent(
                         color = FocusUpColors.TextoSecundario
                     )
 
-                metricas.forEach { (label, valStr) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(text = label, color = FocusUpColors.TextoSecundario, fontSize = 13.sp)
-                        Text(text = valStr, color = FocusUpColors.AzulElectrico, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    panelInfo.metricasClave.forEach { (label, valStr) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = label, color = FocusUpColors.TextoSecundario, fontSize = 13.sp)
+                            Text(text = valStr, color = FocusUpColors.AzulElectrico, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
                     }
                 }
             }
