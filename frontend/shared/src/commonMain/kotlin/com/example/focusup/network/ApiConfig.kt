@@ -1,7 +1,6 @@
 package com.example.focusup.network
 
 import io.ktor.client.*
-import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
@@ -15,7 +14,7 @@ object ApiConfig {
     var tokenSesion: String? = null
 
     val client: HttpClient by lazy {
-        HttpClient(CIO) {
+        HttpClient() {
             install(ContentNegotiation) {
                 json(Json {
                     ignoreUnknownKeys = true

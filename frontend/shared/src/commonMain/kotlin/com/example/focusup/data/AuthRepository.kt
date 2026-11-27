@@ -10,6 +10,7 @@ import com.example.focusup.network.AuthService
  */
 interface AuthRepository {
     suspend fun login(correo: String, password: String): Result<LoginResponse>
+    suspend fun logout(): Result<Boolean>
 }
 
 /** Implementación real: delega en [AuthService] (Ktor Client). */
@@ -18,4 +19,7 @@ class ApiAuthRepository(
 ) : AuthRepository {
     override suspend fun login(correo: String, password: String): Result<LoginResponse> =
         service.login(correo, password)
+
+    override suspend fun logout(): Result<Boolean> =
+        service.logout()
 }

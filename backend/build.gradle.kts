@@ -1,4 +1,3 @@
-
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(ktorLibs.plugins.ktor)
@@ -27,6 +26,7 @@ dependencies {
     implementation(ktorLibs.server.contentNegotiation)
     implementation(ktorLibs.server.core)
     implementation(ktorLibs.server.netty)
+    implementation(ktorLibs.server.cors)
     implementation(libs.logback.classic)
     implementation("at.favre.lib:bcrypt:0.10.2")
     implementation("com.zaxxer:HikariCP:5.1.0")

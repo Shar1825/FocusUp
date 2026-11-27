@@ -1,11 +1,12 @@
 package com.example.focusup.ui.login
 
-
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.focusup.data.ApiAuthRepository
 import com.example.focusup.data.AuthRepository
+import com.example.focusup.data.esPlataformaWeb
 import com.example.focusup.model.LoginResponse
+import com.example.focusup.model.Rol
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -59,8 +60,19 @@ class LoginViewModel(
         viewModelScope.launch {
             repository.login(actual.correo.trim(), actual.password)
                 .onSuccess { usuario ->
-                    // Se limpia la contraseña del estado una vez autenticado
-                    _uiState.update { it.copy(cargando = false, password = "", usuario = usuario) }
+                    if (esPlataformaWeb && usuario.rol != Rol.ADMINISTRADOR) {
+                        repository.logout()
+                        _uiState.update {
+                            it.copy(
+                                cargando = false,
+                                password = "",
+                                usuario = null,
+                                error = "El acceso web es solo para administradores."
+                            )
+                        }
+                    } else {
+                        _uiState.update { it.copy(cargando = false, password = "", usuario = usuario) }
+                    }
                 }
                 .onFailure { ex ->
                     _uiState.update {

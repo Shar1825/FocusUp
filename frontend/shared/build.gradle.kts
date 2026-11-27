@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -8,6 +9,9 @@ plugins {
     kotlin("plugin.serialization") version "2.0.20"
 }
 
+// Confirma la última 3.x estable en https://ktor.io/docs/releases.html y súbela si hay una más nueva
+val ktorVersion = "3.3.1"
+
 kotlin {
     listOf(
         iosArm64(),
@@ -17,6 +21,11 @@ kotlin {
             baseName = "Shared"
             isStatic = true
         }
+    }
+
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs {
+        browser()
     }
 
     android {
@@ -44,13 +53,17 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.compose.uiTooling)
-            // Engine HTTP para Android
-            implementation("io.ktor:ktor-client-cio:3.0.0")
+            // Motor HTTP solo para Android
+            implementation("io.ktor:ktor-client-cio:$ktorVersion")
             // Launcher para cámara en Android
             implementation("androidx.activity:activity-compose:1.8.2")
         }
         iosMain.dependencies {
-            implementation("io.ktor:ktor-client-darwin:3.0.0")
+            implementation("io.ktor:ktor-client-darwin:$ktorVersion")
+        }
+        wasmJsMain.dependencies {
+            // Motor HTTP para el navegador
+            implementation("io.ktor:ktor-client-js:$ktorVersion")
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -61,11 +74,10 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
-            // Cliente HTTP Ktor + serialización JSON
-            implementation("io.ktor:ktor-client-core:3.0.0")
-            implementation("io.ktor:ktor-client-content-negotiation:3.0.0")
-            implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.0")
-            implementation("io.ktor:ktor-client-cio:2.3.12")
+            // Cliente HTTP Ktor + serialización JSON (sin motor: cada plataforma pone el suyo)
+            implementation("io.ktor:ktor-client-core:$ktorVersion")
+            implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
+            implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
