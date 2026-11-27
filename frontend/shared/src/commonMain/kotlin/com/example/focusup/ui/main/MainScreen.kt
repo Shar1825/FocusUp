@@ -245,7 +245,7 @@ private fun HeaderFuturista(usuario: LoginResponse) {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Diego_Islas_Morales"
+                        text = "Diego_Islas_Morales",
                         text = usuario.nombre.take(1).uppercase(),
                         fontWeight = FontWeight.Bold,
                         fontSize = 20.sp,
